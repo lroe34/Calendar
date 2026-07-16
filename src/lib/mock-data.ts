@@ -93,7 +93,13 @@ const explicitEvents: CalendarEvent[] = [
     start: iso(2026, 6, 15, 18, 27),
     end: iso(2026, 6, 15, 21, 14),
     isAllDay: false,
-    location: "O'Hare International Airport",
+    location: {
+      name: "O'Hare International Airport",
+      address: "10000 W O'Hare Ave, Chicago, IL 60666, United States",
+      kind: "flight",
+    },
+    source: { label: "Mail" },
+    showAs: "busy",
   },
   {
     id: "ev-vacation",

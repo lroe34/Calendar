@@ -19,6 +19,7 @@ interface DayViewProps {
   calendars: CalendarSource[];
   onSelectDate: (date: Date) => void;
   onBack: () => void;
+  onSelectEvent: (event: CalendarEvent) => void;
 }
 
 export function DayView({
@@ -29,6 +30,7 @@ export function DayView({
   calendars,
   onSelectDate,
   onBack,
+  onSelectEvent,
 }: DayViewProps) {
   const calendarsById = useMemo(() => new Map(calendars.map((c) => [c.id, c])), [calendars]);
   const isToday = isSameDay(selectedDate, today);
@@ -71,7 +73,12 @@ export function DayView({
       <div ref={scrollRef} className="no-scrollbar absolute inset-0 overflow-y-auto pb-28 pt-32">
         <DayHeading date={selectedDate} />
         <AllDayLane events={allDayEvents} reminders={dayReminders} calendarsById={calendarsById} />
-        <HourGrid events={timedEvents} calendarsById={calendarsById} isToday={isToday} />
+        <HourGrid
+          events={timedEvents}
+          calendarsById={calendarsById}
+          isToday={isToday}
+          onSelectEvent={onSelectEvent}
+        />
       </div>
 
       <div className="absolute inset-x-0 top-0 z-20 bg-white/70 backdrop-blur-xl dark:bg-black/60">

@@ -19,6 +19,20 @@ export interface RecurrenceRule {
   until?: string;
 }
 
+export interface EventLocation {
+  name: string;
+  address?: string;
+  /** Airport/travel-style pin glyph vs. a plain generic map pin. */
+  kind?: "generic" | "flight";
+}
+
+/** Where this event came from — omitted entirely for manually-created events. */
+export interface EventSource {
+  label: string;
+}
+
+export type ShowAs = "busy" | "free" | "tentative";
+
 export interface CalendarEvent {
   id: string;
   calendarId: string;
@@ -28,8 +42,12 @@ export interface CalendarEvent {
   /** ISO 8601 datetime (or date-only for all-day events) */
   end: string;
   isAllDay: boolean;
-  location?: string;
+  location?: EventLocation;
   recurrence?: RecurrenceRule;
+  source?: EventSource;
+  showAs?: ShowAs;
+  videoCallUrl?: string;
+  attendees?: string[];
 }
 
 export interface Reminder {

@@ -9,11 +9,12 @@ interface HourGridProps {
   events: CalendarEvent[];
   calendarsById: Map<string, CalendarSource>;
   isToday: boolean;
+  onSelectEvent?: (event: CalendarEvent) => void;
 }
 
 const GUTTER_WIDTH_PX = 52;
 
-export function HourGrid({ events, calendarsById, isToday }: HourGridProps) {
+export function HourGrid({ events, calendarsById, isToday, onSelectEvent }: HourGridProps) {
   const layout = layoutOverlappingEvents(
     events.map((e) => ({ id: e.id, start: new Date(e.start), end: new Date(e.end) })),
   );
@@ -47,6 +48,7 @@ export function HourGrid({ events, calendarsById, isToday }: HourGridProps) {
               colorName={calendar?.color ?? "gray"}
               columnIndex={l?.columnIndex ?? 0}
               columnCount={l?.columnCount ?? 1}
+              onClick={() => onSelectEvent?.(event)}
             />
           );
         })}

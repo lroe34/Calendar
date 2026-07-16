@@ -172,6 +172,38 @@ export function formatEventTimeRange(start: Date, end: Date): string {
   return `${fmt(start)} – ${fmt(end)}`;
 }
 
+export function formatFullDate(date: Date): string {
+  return `${WEEKDAY_NAMES[date.getDay()]}, ${MONTH_NAMES[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+}
+
+export function formatTimeSpaced(date: Date): string {
+  const h = date.getHours();
+  const m = date.getMinutes();
+  const period = h < 12 ? "AM" : "PM";
+  const displayHour = h % 12 === 0 ? 12 : h % 12;
+  return `${displayHour}:${String(m).padStart(2, "0")} ${period}`;
+}
+
+export function formatEventTimeRangeSpaced(start: Date, end: Date): string {
+  return `${formatTimeSpaced(start)} – ${formatTimeSpaced(end)}`;
+}
+
+export function formatDatePill(date: Date): string {
+  return `${MONTH_ABBR[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+}
+
+/** yyyy-mm-dd for native <input type="date"> */
+export function toDateInputValue(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate(),
+  ).padStart(2, "0")}`;
+}
+
+/** HH:mm for native <input type="time"> */
+export function toTimeInputValue(date: Date): string {
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
 export function minutesSinceMidnight(date: Date): number {
   return date.getHours() * 60 + date.getMinutes();
 }
