@@ -94,7 +94,7 @@ export function DayView({
   const navStyle = transition ? { opacity: navVisible ? 1 : 0, pointerEvents: navVisible ? undefined : ("none" as const) } : undefined;
 
   return (
-    <div className={`relative h-dvh overflow-hidden ${transition ? "pointer-events-none" : ""}`}>
+    <div className={`fixed inset-0 overflow-hidden ${transition ? "pointer-events-none" : ""}`}>
       <div
         ref={scrollRef}
         className="no-scrollbar absolute inset-0 overflow-y-auto pb-28 pt-32"

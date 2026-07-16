@@ -129,7 +129,7 @@ export function MonthView({
   const navStyle = transition ? { opacity: navVisible ? 1 : 0, pointerEvents: navVisible ? undefined : ("none" as const) } : undefined;
 
   return (
-    <div className={`relative h-dvh overflow-hidden ${transition ? "pointer-events-none" : ""}`}>
+    <div className={`fixed inset-0 overflow-hidden ${transition ? "pointer-events-none" : ""}`}>
       <div ref={scrollRef} className="no-scrollbar absolute inset-0 overflow-y-auto pb-28">
         <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-xl dark:bg-black/80">
           <div style={navStyle}>
