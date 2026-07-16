@@ -206,9 +206,11 @@ ICS→UI mapping might miss:
   vs. without time components, and multi-day spans) — the month-view bar rendering and
   day-view all-day lane both depend on this classification.
 - **RRULE presence** → drives the recurring-icon glyph in Day view.
-- **A "reminder/task" concept separate from VEVENT** if the "Send Bahrulla blogs" item is
-  in scope — this doesn't map to a plain ICS VEVENT (closer to a VTODO). Needs an explicit
-  scoping decision (§6).
+- **A "reminder/task" concept separate from VEVENT** — confirmed in scope. The "Send
+  Bahrulla blogs" item is a due-dated reminder (closer to VTODO than VEVENT): needs its
+  own entity with due date + completion state, rendered with the outline-circle/muted-text
+  treatment distinct from calendar events, and integrated into the all-day lane (and
+  possibly Month view bars — unconfirmed, see §6 item 4 analog).
 - **Overlap/collision data** needs to be computed at render time from start/end times per
   visible day — not something stored in the model, but the layout algorithm needs exact
   start/end (not just date) to do interval-graph column assignment.
@@ -218,21 +220,51 @@ ICS→UI mapping might miss:
 
 ---
 
-## 6. Open questions to resolve before/while building
+## 6. Open questions — resolved
 
-1. **Pale vs. solid event bars in Month view** — what do they semantically encode? (busy
-   vs. free, confirmed vs. tentative, or purely calendar-level opacity convention?)
-2. **View-switcher icon in the top-right pill** — does it cycle Day→Week→Month→Year, or
-   open a picker sheet? Is there a Week view at all? Its glyph changes between the two
-   screenshots, implying it reflects current mode rather than being a static icon.
-3. **Are Reminders/tasks in scope** (the "Send Bahrulla blogs" chip), or is this build
-   Calendar-events-only, with that chip either omitted or represented differently?
-4. **Leading/trailing adjacent-month days in Month view** — confirmed grayed-out style,
-   but do they render event bars too, or always blank? (No adjacent-month day with events
-   is visible in this screenshot to confirm either way.)
-5. **New event creation flow** (`+` button target) — no screenshot of this yet; needed
-   before that flow can be built accurately.
-6. **Week view** — not shown; is it required for v1, or Month/Day only for now?
+1. **Pale vs. solid event bars in Month view**: purely per-calendar color, not a status
+   encoding. The user has two calendars whose assigned colors happen to differ in
+   saturation — no busy/free or tentative/confirmed semantics to model. Bar
+   color = calendar color, full stop.
+2. **View-switcher icon**: cycles the Month view's density/rendering mode across four
+   states — **Compact, Stacked, Detailed, List**. "Stacked" is what's shown in the
+   reference screenshot (the default: up to 2 colored bars + "+N" overflow per day).
+   The other three are new surface area to design (see §6.1 below) since no reference
+   screenshot shows them yet.
+3. **Reminders are in scope.** Due-dated reminders (VTODO-like, not VEVENT) surface
+   inline in the Day view all-day lane (and presumably Month view bars) alongside
+   Calendar events, visually distinguished by the outline-circle glyph + muted text
+   treatment observed in §3.2. Data model needs a reminder/task entity distinct from
+   VEVENT, with its own due date and completion state.
+4. **Leading/trailing adjacent-month days in Month view** — still unconfirmed whether
+   they render event bars; treat as blank (numerals only, grayed) until we see a
+   screenshot proving otherwise. Low risk either way, cheap to adjust later.
+5. **New event/reminder creation flow** (`+` button target) — still no reference
+   screenshot; will design when we get there or when one is provided.
+6. **Week view** — still unconfirmed whether it exists as a distinct zoom level (vs.
+   being one of the four Month-view density modes above). Treat as out of scope for v1
+   unless it turns out "List" mode effectively covers the same need.
+
+### 6.1 New surface area from the density-mode answer
+
+Since Month view has 4 density modes, not 1, each needs its own row-rendering spec
+before it's "done" (not just Stacked, which is the only one currently documented in
+§2.4):
+- **Compact** — likely the smallest/highest-density mode: probably shrinks to plain
+  dots (one per calendar with an event that day) with no "+N" text, closer to the
+  classic pre-redesign iOS Calendar month view. Needs its own reference before building,
+  otherwise this will get guessed.
+- **Stacked** — documented in §2.4 (the screenshot we have).
+- **Detailed** — likely shows event title text inside the month cell (not just color
+  bars), meaning row height grows further and text truncation rules apply per event
+  line. Needs its own reference.
+- **List** — likely abandons the grid entirely for an agenda-style scrolling list of
+  events grouped by date (this may be the same concept as "Week view" in question 6).
+  Needs its own reference.
+
+Do not silently implement only Stacked and call the view-switcher done — the switcher
+should exist, be wired up, and at minimum degrade sensibly (e.g. Compact falls back to
+dot-only rendering) even before all four are pixel-perfect.
 
 ---
 
