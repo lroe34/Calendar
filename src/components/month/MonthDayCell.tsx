@@ -1,6 +1,7 @@
 "use client";
 
 import type { CalendarEvent } from "@/lib/types";
+import { dateKey } from "@/lib/date-utils";
 
 export interface RenderedBar {
   event: CalendarEvent;
@@ -16,9 +17,19 @@ interface MonthDayCellProps {
   bars: RenderedBar[];
   overflowCount: number;
   onSelect: (date: Date) => void;
+  /** True while this date's number is being represented by a flying clone elsewhere. */
+  numberHidden?: boolean;
 }
 
-export function MonthDayCell({ date, blank, isToday, bars, overflowCount, onSelect }: MonthDayCellProps) {
+export function MonthDayCell({
+  date,
+  blank,
+  isToday,
+  bars,
+  overflowCount,
+  onSelect,
+  numberHidden,
+}: MonthDayCellProps) {
   if (blank) return <div />;
 
   return (
@@ -28,6 +39,8 @@ export function MonthDayCell({ date, blank, isToday, bars, overflowCount, onSele
     >
       <div className="flex justify-center">
         <span
+          data-cal-daynum={dateKey(date)}
+          style={numberHidden ? { opacity: 0 } : undefined}
           className={
             isToday
               ? "flex h-7 w-7 items-center justify-center rounded-full bg-red-500 text-[17px] font-semibold text-white"

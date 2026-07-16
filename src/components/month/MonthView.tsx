@@ -1,12 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CalendarEvent, CalendarSource } from "@/lib/types";
-import { generateCalendarMonths, MONTH_NAMES } from "@/lib/date-utils";
+import { dateKey, generateCalendarMonths, MONTH_NAMES } from "@/lib/date-utils";
 import { TopNavBar } from "@/components/shared/TopNavBar";
 import { BottomBar } from "@/components/shared/BottomBar";
+import { TRANSITION_MS, TRANSITION_EASE } from "@/lib/transition-constants";
 import { MonthWeekdayHeader } from "./MonthWeekdayHeader";
-import { MonthWeekRow } from "./MonthWeekRow";
+import { MonthWeekRow, type WeekTransitionPhase } from "./MonthWeekRow";
+
+export interface MonthViewTransition {
+  selectedWeekKey: string;
+  mode: "exit" | "enter";
+  armed: boolean;
+}
 
 interface MonthViewProps {
   today: Date;
@@ -14,6 +21,7 @@ interface MonthViewProps {
   events: CalendarEvent[];
   calendars: CalendarSource[];
   onSelectDate: (date: Date) => void;
+  transition?: MonthViewTransition | null;
 }
 
 const MONTHS_BEFORE = 2;
@@ -22,7 +30,14 @@ const MONTHS_AFTER = 3;
 /** Height (px) of the always-pinned nav bar + weekday-letter header above the scroll flow. */
 const STICKY_HEADER_OFFSET_PX = 88;
 
-export function MonthView({ today, anchorDate, events, calendars, onSelectDate }: MonthViewProps) {
+export function MonthView({
+  today,
+  anchorDate,
+  events,
+  calendars,
+  onSelectDate,
+  transition = null,
+}: MonthViewProps) {
   const calendarsById = useMemo(() => new Map(calendars.map((c) => [c.id, c])), [calendars]);
 
   const sections = useMemo(
@@ -57,7 +72,7 @@ export function MonthView({ today, anchorDate, events, calendars, onSelectDate }
     container.scrollTo({ top: Math.max(0, top), behavior: smooth ? "smooth" : "auto" });
   }
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     scrollToSection(anchorSectionIndex, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -93,17 +108,41 @@ export function MonthView({ today, anchorDate, events, calendars, onSelectDate }
     if (idx >= 0) scrollToSection(idx, true);
   }
 
+  // Weeks render in chronological order across sections, so a single running
+  // flag tells us whether we've reached the transitioning row yet.
+  let seenSelectedWeek = false;
+
+  const chromeIsOff = transition ? (transition.mode === "exit" ? transition.armed : !transition.armed) : false;
+  const chromeStyle = transition
+    ? {
+        opacity: chromeIsOff ? 0 : 1,
+        transition: `opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
+      }
+    : undefined;
+
+  // The nav bar and bottom bar are pixel-identical, same-position UI chrome
+  // in both views, so they must never fade/move — only one copy (the
+  // exiting view's) stays visible; the entering view's copy stays invisible
+  // (but still laid out, to avoid a layout jump) until the transition ends
+  // and this view takes over for real.
+  const navVisible = !transition || transition.mode === "exit";
+  const navStyle = transition ? { opacity: navVisible ? 1 : 0, pointerEvents: navVisible ? undefined : ("none" as const) } : undefined;
+
   return (
-    <div className="relative h-dvh overflow-hidden">
+    <div className={`fixed inset-0 overflow-hidden ${transition ? "pointer-events-none" : ""}`}>
       <div ref={scrollRef} className="no-scrollbar absolute inset-0 overflow-y-auto pb-28">
         <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-xl dark:bg-black/80">
-          <TopNavBar backLabel={`${visibleSection.year}`} onBack={() => {}} />
-          <div className="px-4 pb-1 pt-1">
+          <div style={navStyle}>
+            <TopNavBar backLabel={`${visibleSection.year}`} onBack={() => {}} />
+          </div>
+          <div className="px-4 pb-1 pt-1" style={chromeStyle}>
             <h1 className="text-[34px] font-bold leading-tight">
               {MONTH_NAMES[visibleSection.month]}
             </h1>
           </div>
-          <MonthWeekdayHeader highlightColumn={todayColumn} />
+          <div style={chromeStyle}>
+            <MonthWeekdayHeader highlightColumn={todayColumn} />
+          </div>
         </div>
 
         {sections.map((section, i) => {
@@ -111,9 +150,33 @@ export function MonthView({ today, anchorDate, events, calendars, onSelectDate }
           // Clamp so the label never starts so close to the right edge that
           // a long month name (e.g. "September") would run off-screen.
           const labelColumn = Math.min(firstOfMonthColumn, 4);
+          // The section's month-name header sits above all its weeks, so it
+          // travels with whichever direction is true at this point in the
+          // chronological scan (mirrors the "before"/"after" row treatment).
+          const headerPhase: WeekTransitionPhase | null = !transition
+            ? null
+            : seenSelectedWeek
+              ? "after"
+              : "before";
+          const headerIsOff = transition
+            ? transition.mode === "exit"
+              ? transition.armed
+              : !transition.armed
+            : false;
+          const headerStyle = transition
+            ? {
+                transform: headerIsOff
+                  ? headerPhase === "after"
+                    ? "translateY(100vh)"
+                    : "translateY(-100vh)"
+                  : "translateY(0)",
+                opacity: headerIsOff && headerPhase !== "after" ? 0 : 1,
+                transition: `transform ${TRANSITION_MS}ms ${TRANSITION_EASE}, opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
+              }
+            : undefined;
           return (
             <div key={`${section.year}-${section.month}`} ref={(el) => { sectionRefs.current[i] = el; }}>
-              <div className="flex px-4 pb-1 pt-4">
+              <div className="flex px-4 pb-1 pt-4" style={headerStyle}>
                 <div className="w-5 shrink-0" />
                 <div className="grid grow grid-cols-7">
                   <h2
@@ -124,23 +187,32 @@ export function MonthView({ today, anchorDate, events, calendars, onSelectDate }
                   </h2>
                 </div>
               </div>
-              {section.weeks.map((week) => (
-                <MonthWeekRow
-                  key={week.days[0].date.toISOString()}
-                  weekLabel={week.weekLabel}
-                  days={week.days}
-                  events={events}
-                  calendarsById={calendarsById}
-                  today={today}
-                  onSelectDate={onSelectDate}
-                />
-              ))}
+              {section.weeks.map((week) => {
+                const weekKey = dateKey(week.days[0].date);
+                const isSelectedWeek = transition?.selectedWeekKey === weekKey;
+                const phase = !transition ? null : isSelectedWeek ? "selected" : seenSelectedWeek ? "after" : "before";
+                if (isSelectedWeek) seenSelectedWeek = true;
+                return (
+                  <MonthWeekRow
+                    key={weekKey}
+                    weekLabel={week.weekLabel}
+                    days={week.days}
+                    events={events}
+                    calendarsById={calendarsById}
+                    today={today}
+                    onSelectDate={onSelectDate}
+                    transitionPhase={phase}
+                    transitionMode={transition?.mode ?? null}
+                    transitionArmed={transition?.armed ?? false}
+                  />
+                );
+              })}
             </div>
           );
         })}
       </div>
 
-      <div className="absolute inset-x-0 bottom-0 z-20">
+      <div className="absolute inset-x-0 bottom-0 z-20" style={navStyle}>
         <BottomBar onToday={handleToday} />
       </div>
     </div>
