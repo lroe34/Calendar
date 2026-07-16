@@ -120,17 +120,29 @@ export function MonthView({
       }
     : undefined;
 
+  // The nav bar and bottom bar are pixel-identical, same-position UI chrome
+  // in both views, so they must never fade/move — only one copy (the
+  // exiting view's) stays visible; the entering view's copy stays invisible
+  // (but still laid out, to avoid a layout jump) until the transition ends
+  // and this view takes over for real.
+  const navVisible = !transition || transition.mode === "exit";
+  const navStyle = transition ? { opacity: navVisible ? 1 : 0, pointerEvents: navVisible ? undefined : ("none" as const) } : undefined;
+
   return (
     <div className={`relative h-dvh overflow-hidden ${transition ? "pointer-events-none" : ""}`}>
       <div ref={scrollRef} className="no-scrollbar absolute inset-0 overflow-y-auto pb-28">
-        <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-xl dark:bg-black/80" style={chromeStyle}>
-          <TopNavBar backLabel={`${visibleSection.year}`} onBack={() => {}} />
-          <div className="px-4 pb-1 pt-1">
+        <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-xl dark:bg-black/80">
+          <div style={navStyle}>
+            <TopNavBar backLabel={`${visibleSection.year}`} onBack={() => {}} />
+          </div>
+          <div className="px-4 pb-1 pt-1" style={chromeStyle}>
             <h1 className="text-[34px] font-bold leading-tight">
               {MONTH_NAMES[visibleSection.month]}
             </h1>
           </div>
-          <MonthWeekdayHeader highlightColumn={todayColumn} />
+          <div style={chromeStyle}>
+            <MonthWeekdayHeader highlightColumn={todayColumn} />
+          </div>
         </div>
 
         {sections.map((section, i) => {
@@ -200,7 +212,7 @@ export function MonthView({
         })}
       </div>
 
-      <div className="absolute inset-x-0 bottom-0 z-20" style={chromeStyle}>
+      <div className="absolute inset-x-0 bottom-0 z-20" style={navStyle}>
         <BottomBar onToday={handleToday} />
       </div>
     </div>

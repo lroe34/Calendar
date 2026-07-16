@@ -85,6 +85,14 @@ export function DayView({
       }
     : undefined;
 
+  // The nav bar and bottom bar are pixel-identical, same-position UI chrome
+  // in both views, so they must never fade/move — only one copy (the
+  // exiting view's) stays visible; the entering view's copy stays invisible
+  // (but still laid out, to avoid a layout jump) until the transition ends
+  // and this view takes over for real.
+  const navVisible = !transition || transition.mode === "exit";
+  const navStyle = transition ? { opacity: navVisible ? 1 : 0, pointerEvents: navVisible ? undefined : ("none" as const) } : undefined;
+
   return (
     <div className={`relative h-dvh overflow-hidden ${transition ? "pointer-events-none" : ""}`}>
       <div
@@ -102,17 +110,21 @@ export function DayView({
         />
       </div>
 
-      <div className="absolute inset-x-0 top-0 z-20 bg-white/70 backdrop-blur-xl dark:bg-black/60" style={chromeStyle}>
-        <TopNavBar backLabel={MONTH_NAMES[selectedDate.getMonth()].slice(0, 3)} onBack={onBack} />
-        <MiniWeekStrip
-          selectedDate={selectedDate}
-          today={today}
-          onSelectDate={onSelectDate}
-          hiddenDayKeys={transition?.hiddenDayKeys}
-        />
+      <div className="absolute inset-x-0 top-0 z-20 bg-white/70 backdrop-blur-xl dark:bg-black/60">
+        <div style={navStyle}>
+          <TopNavBar backLabel={MONTH_NAMES[selectedDate.getMonth()].slice(0, 3)} onBack={onBack} />
+        </div>
+        <div style={chromeStyle}>
+          <MiniWeekStrip
+            selectedDate={selectedDate}
+            today={today}
+            onSelectDate={onSelectDate}
+            hiddenDayKeys={transition?.hiddenDayKeys}
+          />
+        </div>
       </div>
 
-      <div className="absolute inset-x-0 bottom-0 z-20" style={chromeStyle}>
+      <div className="absolute inset-x-0 bottom-0 z-20" style={navStyle}>
         <BottomBar onToday={() => onSelectDate(today)} />
       </div>
     </div>
