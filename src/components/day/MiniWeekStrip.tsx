@@ -1,22 +1,26 @@
 "use client";
 
-import { WEEKDAY_LETTERS, isSameDay, startOfWeek, addDays } from "@/lib/date-utils";
+import { WEEKDAY_LETTERS, dateKey, isSameDay, startOfWeek, addDays } from "@/lib/date-utils";
 
 interface MiniWeekStripProps {
   selectedDate: Date;
   today: Date;
   onSelectDate: (date: Date) => void;
+  /** Date keys whose number should stay invisible (a flying clone is standing in for it). */
+  hiddenDayKeys?: Set<string>;
 }
 
-export function MiniWeekStrip({ selectedDate, today, onSelectDate }: MiniWeekStripProps) {
+export function MiniWeekStrip({ selectedDate, today, onSelectDate, hiddenDayKeys }: MiniWeekStripProps) {
   const weekStart = startOfWeek(selectedDate);
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
   return (
-    <div className="grid grid-cols-7 px-2 pb-2">
+    <div data-cal-ministrip className="grid grid-cols-7 px-2 pb-2">
       {days.map((date, i) => {
         const isToday = isSameDay(date, today);
         const isSelected = isSameDay(date, selectedDate);
+        const key = dateKey(date);
+        const hidden = hiddenDayKeys?.has(key) ?? false;
         return (
           <button
             key={date.toISOString()}
@@ -27,6 +31,8 @@ export function MiniWeekStrip({ selectedDate, today, onSelectDate }: MiniWeekStr
               {WEEKDAY_LETTERS[i]}
             </span>
             <span
+              data-cal-daynum={key}
+              style={hidden ? { opacity: 0 } : undefined}
               className={
                 isToday
                   ? "flex h-7 w-7 items-center justify-center rounded-full bg-red-500 text-[16px] font-semibold text-white"
