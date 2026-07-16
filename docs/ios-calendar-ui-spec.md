@@ -268,6 +268,45 @@ dot-only rendering) even before all four are pixel-perfect.
 
 ---
 
+## 6.2 Animations, gestures & micro-interactions
+
+Everything above was derived from two static screenshots, which can prove layout and
+color but cannot prove motion. Nothing in this section is "confirmed" the way §1–§5 are
+— it's either an explicit unknown or a documented placeholder assumption (standard
+iOS/UIKit convention) to implement now and correct once we can compare against the real
+app in motion (ideally via screen recording).
+
+**Unconfirmed — needs real reference before it can be called done:**
+- Month-cell tap → Day view transition (cross-fade / push / morph-from-cell?).
+- Day view horizontal swipe between adjacent days (finger-tracked live drag vs.
+  animate-only-on-release).
+- Month density-mode switch (Compact/Stacked/Detailed/List): hard cut or animated morph.
+- Back-button pop direction/curve (Day→Month, Month→Year).
+- Event-block tap → detail view presentation (sheet, push, or zoom-from-block).
+- Drag-to-create and drag-to-resize/move on the Day view hour grid: snap increment,
+  ghost/placeholder treatment, handle behavior.
+- `+` button → creation sheet presentation style.
+- Long-press behavior on dates/events (context menu / peek preview?).
+- Current-time red line: continuous smooth creep vs. periodic re-render tick.
+
+**Placeholder assumptions to build against now** (standard iOS platform conventions,
+explicitly flagged as guesses, not spec):
+- Scroll physics: native momentum + deceleration + rubber-band overscroll, approximated
+  with normal browser scroll (no custom physics unless it feels wrong later).
+- Transitions: short (~250–300ms) ease-out for view changes, spring-like (approximated
+  via `cubic-bezier` or a spring lib) for anything that feels "alive" — to be tuned by
+  feel, not by a number derived from a still image.
+- "Today" button: animated scroll-to rather than instant jump.
+- Haptics: real iOS fires haptic taps at drag-snap points, selection changes, and
+  swipe-threshold crossings. A web app can only crudely approximate this (Vibration API,
+  installed-PWA + supporting browser only) — treat haptic parity as inherently
+  lower-fidelity, not a bug if it's absent in the browser.
+
+Action item: a short screen recording (tap a month date, swipe between days, drag to
+create/resize an event) would convert the "unconfirmed" list above into real spec. Until
+then, those interactions get built to the placeholder/best-guess standard and are
+expected to need correction.
+
 ## 7. Explicit "don't half-ass this" checklist
 
 Concrete list of things that are easy to skip, approximate, or get subtly wrong:
