@@ -285,19 +285,100 @@ requires an iOS-standard destructive confirmation (action sheet or alert: "Delet
 event?") before actually deleting — not provable from this screenshot, but a strong
 platform-convention assumption.
 
-### 3.6.8 Open questions specific to this sheet
+### 3.6.8 Open questions specific to this sheet — resolved / remaining
 
-- Entrance/exit animation (motion, unconfirmed per §6.2's pattern).
-- Whether the Mail source-link card is flight/travel-specific or conditionally shown
-  based on some "linked source message" field in general.
-- Edit-mode layout (no reference).
-- Calendar/Show-As picker interaction style (inline dropdown vs. separate sheet).
-- Delete confirmation's exact copy/style.
-- What a plain, manually-created, non-flight event's sheet looks like when it has no
-  location at all (does the `Location` section just not render?) or a plain
-  street-address-only location (no Mail card, just the address+map card?).
-- Whether a recurring event's sheet adds a "Repeat" row to `Options`, and whether editing
-  a recurring event prompts "this event / all future events" like standard iOS Calendar.
+- **Resolved — Mail card**: it's shown *only* when the event was parsed from an email;
+  manually-created events show nothing in its place (no fallback UI, no placeholder
+  card). Generalized for the web: the data model gets an optional **source** field (not
+  literally "Mail" — a generic "this event came from X" indicator), rendered as that same
+  card style when present and omitted entirely when absent.
+- **Resolved — the map thumbnail**: it's a real (MapKit-style) map render that simply
+  hadn't finished loading tiles in the reference screenshot (hence the plain tan/gray
+  grid look) — not a deliberate "unloaded" placeholder design. The intended look is a
+  proper muted-color simplified map with roads and a pin. We have no real mapping API in
+  scope here, so build a stylized decorative map (light muted background, a few road
+  lines, pin + label) rather than literally integrating MapKit/Mapbox/Google
+  Maps — visually representative, not a functional interactive map.
+- **Resolved — edit-mode layout**: see new §3.7 below.
+- Still open: Calendar/Show-As picker interaction style (inline dropdown vs. separate
+  sheet) — not shown in either reference.
+- Still open: Delete confirmation's exact copy/style.
+- Still open: whether a recurring event's edit mode prompts "this event / all future
+  events" like standard iOS Calendar (this event has no recurrence).
+
+---
+
+## 3.7 Event Detail Sheet — Edit Mode
+
+Reference: the same flight event, opened via the view mode's "Edit" button.
+
+### 3.7.1 Top bar
+
+- Top-left: same circular **X button** as view mode — presumably cancels the edit
+  (discards changes) rather than saving, though not provable from a still image; the
+  standard iOS convention is X-cancels/checkmark-saves, which this layout matches.
+- Top-right: a circular **checkmark button** (replaces the "Edit" pill) — saves/commits
+  changes and returns to view mode.
+
+### 3.7.2 Title & schedule card group
+
+- The title is now inside its own white rounded card, rendered as a **single-line,
+  truncated-with-ellipsis editable text field** ("Flight: AA 1913 from ORD t...") —
+  unlike view mode's multi-line wrapped display. Confirms the title becomes a real inline
+  text input, not a wrapped label, while editing.
+- The same tall blue accent capsule from view mode still runs alongside this card group
+  (spanning both the title card and the schedule card below it as one continuous accent,
+  even though they're visually two separate white card blocks with a gap between).
+- A second card below groups four rows:
+  - **Starts**: label + two separate gray capsule/pill fields — a date pill ("Jul 15,
+    2026") and a time pill ("6:27 PM") — each independently tappable (presumably opening
+    a date picker / time picker).
+  - **Ends**: identical structure ("Jul 15, 2026" / "9:14 PM").
+  - **All-day**: small calendar icon + label, with a standard iOS **toggle switch** on
+    the right (off/gray here, since this event is timed). Toggling this presumably hides
+    the time pills and keeps just the date pills, mirroring standard iOS Calendar
+    behavior — not provable from this screenshot since it's off, but a safe platform
+    convention to assume.
+  - **Repeat**: looped-arrow icon + label, value "Never" + disclosure chevron (same
+    picker-row style as Calendar/Show-As in view mode's Options section).
+  - Each row separated by a thin full-width divider within the same card.
+
+### 3.7.3 Location (edit mode)
+
+- **No Mail/source card here** — only the address+map card is shown, confirming the
+  source indicator is a view-mode-only affordance, not something exposed for inline
+  editing.
+- The map thumbnail now shows a **pin + text label directly on the map** ("O'Hare
+  International Airport", styled like a real Maps app annotation) — richer than view
+  mode's plain unlabeled thumbnail.
+- A small circular **X (remove) button** overlays the top-right corner of the map, to
+  clear the location.
+- Below the location row (same card, separated by a divider, no new section header): an
+  **add-affordance row** — a circled "+" icon and gray placeholder text **"Video Call or
+  Conference"** — a field not shown at all in view mode (since it's unset), revealing
+  that edit mode surfaces optional not-yet-set fields as tappable "add" rows.
+
+### 3.7.4 Invitees
+
+- New section (header "Invitees") not present anywhere in view mode — because view mode
+  conditionally omits sections with no data, and this event has none. Edit mode instead
+  shows an **empty add-affordance row**: a two-person icon + gray placeholder text
+  "Invitees", implying tap-to-add.
+
+### 3.7.5 Options (edit mode)
+
+- Screenshot cuts off here (only the "Options" section header and the top edge of its
+  first row are visible) — presumably the same Calendar/Show-As rows as view mode, likely
+  still with Delete Event below, but not confirmed from this reference.
+
+### 3.7.6 Pattern this confirms generally
+
+Edit mode's defining behavior: **every field becomes inline-editable in place** (pills,
+toggles, disclosure pickers, text fields) rather than navigating to a separate editor
+screen per field, and **optional/unset fields that view mode hides entirely reappear as
+tappable "add" rows** (Video Call, Invitees) once editing. Build the sheet around one
+shared data shape with two render modes (view/edit) rather than two independent
+components that could drift apart.
 
 ---
 
@@ -344,13 +425,19 @@ ICS→UI mapping might miss:
   state/zip/country) for the address card (§3.6.4), plus coordinates if we ever want a
   real map thumbnail. Closest ICS analog is `LOCATION` + `GEO`, though ICS's `LOCATION`
   is normally just one string — this model needs it split out.
-- **Optional linked-source-message reference** — the "Mail" card (§3.6.4) implies an
-  optional field pointing back to a source message/email the event was parsed from. Not
-  a standard ICS property; treat as an app-specific extension field, and make it
-  genuinely optional (most manually-created events won't have one).
+- **Optional source field** — confirmed: shown only when the event was parsed from an
+  email (or, generalized for the web, any external source); manually-created events carry
+  no source and render nothing in its place, no fallback UI. Model as
+  `source?: { label: string; ... }` on `CalendarEvent` — genuinely optional, not literally
+  "Mail" (that's just what iOS calls it since it parsed from an email there).
 - **Calendar display name + color together** — the Options "Calendar" row (§3.6.6) shows
   both, confirming `CalendarSource` (already modeled as `{id, name, color}`) is the right
   shape; the detail sheet just needs to surface it as a reassignable field on the event.
+- **Video call / conference link** — optional field (§3.7.3), shown as a set value when
+  present or an "add" affordance in edit mode when absent; omitted entirely in view mode
+  when unset (same conditional-section pattern as Location/source).
+- **Invitees** — optional list of attendees (ICS `ATTENDEE` lines), same conditional
+  pattern: omitted in view mode when empty, shown as an "add" row in edit mode.
 
 ---
 
@@ -483,3 +570,15 @@ Concrete list of things that are easy to skip, approximate, or get subtly wrong:
       in a solid-fill/white-text variant — don't build a second one-off event-block renderer.
 - [ ] Calendar/Show-As rows show a value **and** a disclosure chevron — they're pickers,
       not static labels.
+- [ ] Source card (Mail-equivalent) renders only when the event actually has a source —
+      no fallback/placeholder card for manually-created events.
+- [ ] Edit mode uses real inline-editable controls per field (text input, date/time
+      pills, toggle, disclosure pickers) — it is not a separate "form page" navigated to.
+- [ ] Optional unset fields (Video Call, Invitees) are hidden entirely in view mode but
+      appear as tappable "add" rows in edit mode — don't render empty sections in view
+      mode, and don't skip the add-affordance in edit mode.
+- [ ] The map thumbnail is a stylized decorative map (muted colors, roads, pin) — not a
+      literal tan/gray unloaded-tile look, and not a functional real map (no mapping API
+      in scope).
+- [ ] View and edit modes share one underlying data shape/component tree rather than
+      being built as two independently-drifting UIs.
