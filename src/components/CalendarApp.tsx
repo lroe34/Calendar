@@ -140,51 +140,63 @@ export function CalendarApp() {
   const renderMonth = screen === "month" || transition?.mode === "toMonth";
   const renderDay = screen === "day" || transition?.mode === "toDay";
 
+  // The exiting view is what's visibly clearing away (weeks sliding/fading
+  // off), so it must stay stacked in front; the entering view sits behind,
+  // revealed as the exiting one moves out of the way. DOM order alone can't
+  // express this since it's the same fixed pair of components regardless of
+  // direction, so it's driven explicitly by z-index instead.
+  const monthZ = !transition ? undefined : transition.mode === "toDay" ? 2 : 1;
+  const dayZ = !transition ? undefined : transition.mode === "toDay" ? 1 : 2;
+
   return (
     <>
       {renderMonth && (
-        <MonthView
-          today={today}
-          anchorDate={selectedDate}
-          events={events}
-          calendars={calendars}
-          onSelectDate={handleSelectDateFromMonth}
-          transition={
-            transition
-              ? {
-                  selectedWeekKey: transition.selectedWeekKey,
-                  mode: transition.mode === "toDay" ? "exit" : "enter",
-                  armed: transition.armed,
-                }
-              : null
-          }
-        />
+        <div style={{ position: "fixed", inset: 0, zIndex: monthZ }}>
+          <MonthView
+            today={today}
+            anchorDate={selectedDate}
+            events={events}
+            calendars={calendars}
+            onSelectDate={handleSelectDateFromMonth}
+            transition={
+              transition
+                ? {
+                    selectedWeekKey: transition.selectedWeekKey,
+                    mode: transition.mode === "toDay" ? "exit" : "enter",
+                    armed: transition.armed,
+                  }
+                : null
+            }
+          />
+        </div>
       )}
 
       {renderDay && (
-        <DayView
-          today={today}
-          selectedDate={selectedDate}
-          events={events}
-          reminders={reminders}
-          calendars={calendars}
-          onSelectDate={(date) => setSelectedDate(startOfDay(date))}
-          onBack={handleBackToMonth}
-          onSelectEvent={(event) => setOpenEventId(event.id)}
-          transition={
-            transition
-              ? {
-                  mode: transition.mode === "toDay" ? "enter" : "exit",
-                  armed: transition.armed,
-                  hiddenDayKeys: new Set(
-                    transition.weekDays
-                      .filter((_, i) => transition.fromRects[i] && transition.toRects?.[i] !== null)
-                      .map(dateKey),
-                  ),
-                }
-              : null
-          }
-        />
+        <div style={{ position: "fixed", inset: 0, zIndex: dayZ }}>
+          <DayView
+            today={today}
+            selectedDate={selectedDate}
+            events={events}
+            reminders={reminders}
+            calendars={calendars}
+            onSelectDate={(date) => setSelectedDate(startOfDay(date))}
+            onBack={handleBackToMonth}
+            onSelectEvent={(event) => setOpenEventId(event.id)}
+            transition={
+              transition
+                ? {
+                    mode: transition.mode === "toDay" ? "enter" : "exit",
+                    armed: transition.armed,
+                    hiddenDayKeys: new Set(
+                      transition.weekDays
+                        .filter((_, i) => transition.fromRects[i] && transition.toRects?.[i] !== null)
+                        .map(dateKey),
+                    ),
+                  }
+                : null
+            }
+          />
+        </div>
       )}
 
       {transition && (
