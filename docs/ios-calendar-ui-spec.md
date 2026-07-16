@@ -188,6 +188,119 @@ chrome, not the app — ignored below except where they affect safe-area layout.
 
 ---
 
+## 3.6 Event Detail Sheet
+
+Reference: a screenshot of the "Flight: AA 1913 from ORD to IAH" event opened from Day
+view. Shared across Month/Day (tapping any event opens this, regardless of which view
+you tapped it from) — documented here as its own top-level surface, not nested under Day.
+
+### 3.6.1 Presentation
+
+- **Modal sheet, not full-screen.** The background (status bar, the flight live-activity
+  island, profile photo, battery) stays visible but dimmed behind the sheet — this is the
+  standard iOS partial-height sheet presentation, not a full-screen cover and not a push.
+  Confirms one of §6.2's open animation questions (sheet vs. push vs. zoom-morph) as
+  "sheet" — but the *entrance/exit animation itself* (slide up? grow from the tapped
+  block?) still isn't provable from a still image; treat that motion as still unconfirmed.
+- **Rounded top corners** on the sheet, standard iOS sheet radius.
+- **No visible drag grabber** (the small gray pill some iOS sheets show top-center) in
+  this screenshot — the sheet relies on its own X button instead. Don't add a grabber
+  unless a future reference shows one.
+- Sheet content area background is light gray; individual content groups render as white
+  rounded-rect "cards" on top of it — the standard iOS grouped/inset-list convention (same
+  visual language as Settings.app), reused for `Location` and `Options` groups here.
+
+### 3.6.2 Top bar
+
+- Top-left: a plain circular **X (close) button**, white fill, black X — no label, no
+  surrounding nav bar, just floats at the sheet's top-left.
+- Top-right: an **"Edit" pill button** (light gray capsule, black text) — presumably
+  switches the sheet into an editable form. No reference yet for what edit mode looks
+  like.
+
+### 3.6.3 Title block
+
+- A **vertical rounded-capsule accent bar** to the left of the title (same visual
+  language as the Day-view event-block accent, §3.4, just taller — spans the full height
+  of the title+date+time text block), colored to match the event's calendar color.
+- Title: large bold black text, wraps to multiple lines (2 lines here).
+- Below title: the date as a full written-out line ("Wednesday, July 15, 2026").
+- Below that: the time range ("6:27 PM – 9:14 PM"), same weight/size as the date line.
+- No calendar name or icon appears in this block — that's lower down in `Options`.
+
+### 3.6.4 Location section
+
+Header label "Location" (gray, small, standard grouped-section header style), followed
+by **two separate cards**:
+
+1. A **"Mail" source-link card**: blue rounded-square Mail app icon, "Mail" label, and on
+   the right an **"Open" pill button** (mint/light-green fill) plus a circular
+   share/export icon button. This is almost certainly flight/travel-specific — this event
+   was likely auto-parsed from a confirmation email, and this card is a shortcut back to
+   that source email in Mail.app. **Don't assume every event has this** — it's plausibly
+   conditional on the event having a linked source message, which a plain manually-created
+   event (e.g. "Hinge Health Exercise Therapy Session") would not have.
+2. An **address card**: bold location name ("O'Hare International Airport"), gray address
+   text below (street/city/state/zip/country, wrapping to 2 lines), and a small square
+   **static map thumbnail** on the right (stylized tan/cream map with grid lines and a
+   pin/marker icon — here a plane-in-pin glyph since it's an airport).
+
+Both "Open" (deep-links to Mail.app) and the map thumbnail (presumably deep-links to
+Maps.app) are **cross-app navigation that a web app cannot replicate** — flag as
+out-of-scope/needs-a-graceful-fallback rather than silently faking it.
+
+### 3.6.5 Embedded mini day-preview
+
+A separate white rounded card containing a **cropped, read-only preview of the Day view
+hour grid** around the event's time (6 PM–9 PM here), same hour gridlines/labels as the
+real Day view, with the event block rendered **inverted from its normal Day-view style**:
+solid saturated fill (not the pale ~15–20%-opacity tint) with **white text**, including
+the same title/location-pin/clock-time detail lines as the normal expanded block. This
+is effectively a "focused/selected" restyle of the same `EventBlock` component already
+built for Day view, cropped to a short time window and reused inside this sheet. Unknown
+whether this mini-grid is itself interactive (e.g., tap to jump to full Day view) or
+purely decorative — no reference either way.
+
+### 3.6.6 Options section
+
+Header label "Options", then grouped rows:
+
+- **Calendar row**: small calendar-grid icon + "Calendar" label on the left; on the
+  right, a colored dot (matching the assigned calendar's color) + the calendar's name +
+  an up/down disclosure chevron — implies tapping opens a picker to reassign which
+  calendar the event belongs to.
+- **Show As row**: a hand-raised icon + "Show As" label on the left; "Busy" + the same
+  disclosure chevron on the right — a busy/free/tentative availability picker.
+- No "Repeat" row appears here, but this event has no recurrence — a recurring event's
+  sheet almost certainly needs one; unconfirmed since no recurring-event sheet screenshot
+  exists yet.
+
+### 3.6.7 Delete Event
+
+A **red "Delete Event" pill button**, floating and appearing to overlap/sit above the
+last Options row in this screenshot — most plausibly a persistent floating button pinned
+at the bottom of the sheet's scrollable content (same floating-pill pattern as the
+"Today" button elsewhere in this app), rather than a plain list row. Almost certainly
+requires an iOS-standard destructive confirmation (action sheet or alert: "Delete this
+event?") before actually deleting — not provable from this screenshot, but a strong
+platform-convention assumption.
+
+### 3.6.8 Open questions specific to this sheet
+
+- Entrance/exit animation (motion, unconfirmed per §6.2's pattern).
+- Whether the Mail source-link card is flight/travel-specific or conditionally shown
+  based on some "linked source message" field in general.
+- Edit-mode layout (no reference).
+- Calendar/Show-As picker interaction style (inline dropdown vs. separate sheet).
+- Delete confirmation's exact copy/style.
+- What a plain, manually-created, non-flight event's sheet looks like when it has no
+  location at all (does the `Location` section just not render?) or a plain
+  street-address-only location (no Mail card, just the address+map card?).
+- Whether a recurring event's sheet adds a "Repeat" row to `Options`, and whether editing
+  a recurring event prompts "this event / all future events" like standard iOS Calendar.
+
+---
+
 ## 4. Shared components / cross-cutting concerns
 
 | Component | Notes |
@@ -197,6 +310,8 @@ chrome, not the app — ignored below except where they affect safe-area layout.
 | Recurring icon | Looped-arrow glyph, appears in Day view event blocks; verify whether Month view bars also need any recurrence marker (not clearly visible at that zoom level — likely no, since bars carry no icons). |
 | Blur materials | Nav bar, bottom bars — both views, both need real translucency + blur with content scrolling beneath. |
 | Truncation | Ellipsis truncation for both month "+N" overflow and narrow day-view overlapping columns. |
+| Event accent capsule | The inset rounded-capsule left accent (§3.4) is reused, taller, in the detail sheet's title block (§3.6.3) — one shared visual token, two sizes. |
+| EventBlock (solid variant) | The detail sheet's mini day-preview (§3.6.5) needs a solid-fill/white-text variant of the same Day-view `EventBlock` component, not a separate one-off. |
 
 ---
 
@@ -221,6 +336,21 @@ ICS→UI mapping might miss:
 - **Status/confidence field** if the pale-vs-solid bar distinction in Month view turns out
   to encode tentative/confirmed or busy/free (§6 open question) — would need a field for
   that if so.
+- **Availability ("Show As")** — Busy/Free/Tentative-style field, confirmed by the detail
+  sheet's Options section (§3.6.6). Standard `TRANSP`/`STATUS`-adjacent ICS concept.
+  Distinct from the (resolved-as-not-real) "status/confidence" bar-color question above.
+- **Structured location** — the detail sheet needs more than a plain string: a location
+  *name* ("O'Hare International Airport") separate from its *address* (street/city/
+  state/zip/country) for the address card (§3.6.4), plus coordinates if we ever want a
+  real map thumbnail. Closest ICS analog is `LOCATION` + `GEO`, though ICS's `LOCATION`
+  is normally just one string — this model needs it split out.
+- **Optional linked-source-message reference** — the "Mail" card (§3.6.4) implies an
+  optional field pointing back to a source message/email the event was parsed from. Not
+  a standard ICS property; treat as an app-specific extension field, and make it
+  genuinely optional (most manually-created events won't have one).
+- **Calendar display name + color together** — the Options "Calendar" row (§3.6.6) shows
+  both, confirming `CalendarSource` (already modeled as `{id, name, color}`) is the right
+  shape; the detail sheet just needs to surface it as a reassignable field on the event.
 
 ---
 
@@ -343,3 +473,13 @@ Concrete list of things that are easy to skip, approximate, or get subtly wrong:
 - [ ] Mini week-strip in Day view is interactive/independent, not a static label row.
 - [ ] All bars/blocks use per-calendar color pulled from the data model, never hardcoded
       per screen.
+- [ ] Event detail sheet is a true modal sheet (dimmed background peeking through, rounded
+      top corners), not a full-screen page/route.
+- [ ] `Location` section is conditional — don't render it (or its Mail sub-card) for
+      events that have no location / no linked source message.
+- [ ] Delete Event is a floating pinned pill at the bottom of the sheet, not a plain list
+      row, and needs a destructive confirmation step before it actually deletes.
+- [ ] The mini day-preview inside the detail sheet reuses the real `EventBlock` component
+      in a solid-fill/white-text variant — don't build a second one-off event-block renderer.
+- [ ] Calendar/Show-As rows show a value **and** a disclosure chevron — they're pickers,
+      not static labels.
