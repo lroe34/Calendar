@@ -32,11 +32,33 @@ function measureRects(selector: (key: string) => string, weekDays: Date[]): (Fly
   });
 }
 
-const measureMonthRects = (weekDays: Date[]) =>
-  measureRects((key) => `[data-cal-daynum="${key}"]`, weekDays);
-
 const measureMiniStripRects = (weekDays: Date[]) =>
   measureRects((key) => `[data-cal-ministrip] [data-cal-daynum="${key}"]`, weekDays);
+
+// Unlike the mini week strip, a month week row is itself CSS-transformed
+// (translated off-screen) while its view is still "unarmed" — that's how it
+// starts positioned for the enter animation. Measuring through that
+// transform would capture the row's off-screen position instead of its
+// resting one, so it's neutralized for the instant of measurement.
+function measureMonthRects(weekDays: Date[]): (FlyingRect | null)[] {
+  return weekDays.map((d) => {
+    const el = document.querySelector<HTMLElement>(`[data-cal-daynum="${dateKey(d)}"]`);
+    if (!el) return null;
+    const row = el.closest<HTMLElement>("[data-cal-week]");
+    const prevTransform = row?.style.transform ?? "";
+    const prevTransition = row?.style.transition ?? "";
+    if (row) {
+      row.style.transition = "none";
+      row.style.transform = "none";
+    }
+    const r = el.getBoundingClientRect();
+    if (row) {
+      row.style.transform = prevTransform;
+      row.style.transition = prevTransition;
+    }
+    return { left: r.left, top: r.top, width: r.width, height: r.height };
+  });
+}
 
 export function CalendarApp() {
   const today = startOfDay(new Date());
@@ -93,13 +115,19 @@ export function CalendarApp() {
 
   // Once the entering view has mounted, measure its target rects, then flip
   // `armed` a frame later so the browser observes a from -> to transition.
+  // Measuring is deferred into a rAF (rather than done inline here) so the
+  // entering view's own mount effect (e.g. MonthView scrolling to the right
+  // section) has definitely settled first.
   useLayoutEffect(() => {
     if (!transition || transition.toRects) return;
-    const toRects =
-      transition.mode === "toDay"
-        ? measureMiniStripRects(transition.weekDays)
-        : measureMonthRects(transition.weekDays);
-    setTransition((t) => (t ? { ...t, toRects } : t));
+    const raf = requestAnimationFrame(() => {
+      const toRects =
+        transition.mode === "toDay"
+          ? measureMiniStripRects(transition.weekDays)
+          : measureMonthRects(transition.weekDays);
+      setTransition((t) => (t && !t.toRects ? { ...t, toRects } : t));
+    });
+    return () => cancelAnimationFrame(raf);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transition?.toRects === null]);
 
