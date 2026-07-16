@@ -1,19 +1,48 @@
 "use client";
 
-import { useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import { MonthView } from "@/components/month/MonthView";
 import { DayView } from "@/components/day/DayView";
 import { EventDetailSheet } from "@/components/event-sheet/EventDetailSheet";
+import { FlyingDayNumbers, type FlyingRect } from "@/components/transitions/FlyingDayNumbers";
 import { calendars, events as initialEvents, reminders } from "@/lib/mock-data";
-import { startOfDay } from "@/lib/date-utils";
+import { addDays, dateKey, startOfDay, startOfWeek } from "@/lib/date-utils";
+import { TRANSITION_MS } from "@/lib/transition-constants";
 import type { CalendarEvent } from "@/lib/types";
 
-type View = "month" | "day";
+type Screen = "month" | "day";
+
+interface Transition {
+  mode: "toDay" | "toMonth";
+  /** The date that anchors the transition: tapped in month view, or the day view's selected date when going back. */
+  date: Date;
+  selectedWeekKey: string;
+  weekDays: Date[];
+  fromRects: (FlyingRect | null)[];
+  toRects: (FlyingRect | null)[] | null;
+  armed: boolean;
+}
+
+function measureRects(selector: (key: string) => string, weekDays: Date[]): (FlyingRect | null)[] {
+  return weekDays.map((d) => {
+    const el = document.querySelector<HTMLElement>(selector(dateKey(d)));
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { left: r.left, top: r.top, width: r.width, height: r.height };
+  });
+}
+
+const measureMonthRects = (weekDays: Date[]) =>
+  measureRects((key) => `[data-cal-daynum="${key}"]`, weekDays);
+
+const measureMiniStripRects = (weekDays: Date[]) =>
+  measureRects((key) => `[data-cal-ministrip] [data-cal-daynum="${key}"]`, weekDays);
 
 export function CalendarApp() {
   const today = startOfDay(new Date());
-  const [view, setView] = useState<View>("month");
+  const [screen, setScreen] = useState<Screen>("month");
   const [selectedDate, setSelectedDate] = useState(today);
+  const [transition, setTransition] = useState<Transition | null>(null);
   const [events, setEvents] = useState<CalendarEvent[]>(initialEvents);
   const [openEventId, setOpenEventId] = useState<string | null>(null);
   // Kept mounted (even while closed) so Vaul's close/drag-to-dismiss
@@ -28,10 +57,76 @@ export function CalendarApp() {
     setSheetEvent(liveOpenEvent);
   }
 
-  function handleSelectDate(date: Date) {
-    setSelectedDate(startOfDay(date));
-    setView("day");
+  function weekDaysFor(date: Date): Date[] {
+    const start = startOfWeek(date);
+    return Array.from({ length: 7 }, (_, i) => addDays(start, i));
   }
+
+  function handleSelectDateFromMonth(date: Date) {
+    if (transition) return;
+    const weekDays = weekDaysFor(date);
+    setTransition({
+      mode: "toDay",
+      date,
+      selectedWeekKey: dateKey(weekDays[0]),
+      weekDays,
+      fromRects: measureMonthRects(weekDays),
+      toRects: null,
+      armed: false,
+    });
+    setSelectedDate(startOfDay(date));
+  }
+
+  function handleBackToMonth() {
+    if (transition) return;
+    const weekDays = weekDaysFor(selectedDate);
+    setTransition({
+      mode: "toMonth",
+      date: selectedDate,
+      selectedWeekKey: dateKey(weekDays[0]),
+      weekDays,
+      fromRects: measureMiniStripRects(weekDays),
+      toRects: null,
+      armed: false,
+    });
+  }
+
+  // Once the entering view has mounted, measure its target rects, then flip
+  // `armed` a frame later so the browser observes a from -> to transition.
+  useLayoutEffect(() => {
+    if (!transition || transition.toRects) return;
+    const toRects =
+      transition.mode === "toDay"
+        ? measureMiniStripRects(transition.weekDays)
+        : measureMonthRects(transition.weekDays);
+    setTransition((t) => (t ? { ...t, toRects } : t));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transition?.toRects === null]);
+
+  useLayoutEffect(() => {
+    if (!transition || !transition.toRects || transition.armed) return;
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        setTransition((t) => (t ? { ...t, armed: true } : t));
+      });
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transition?.toRects, transition?.armed]);
+
+  useLayoutEffect(() => {
+    if (!transition || !transition.armed) return;
+    const timer = setTimeout(() => {
+      setScreen(transition.mode === "toDay" ? "day" : "month");
+      setTransition(null);
+    }, TRANSITION_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transition?.armed]);
 
   function handleSaveEvent(updated: CalendarEvent) {
     setEvents((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
@@ -42,9 +137,31 @@ export function CalendarApp() {
     setOpenEventId(null);
   }
 
+  const renderMonth = screen === "month" || transition?.mode === "toMonth";
+  const renderDay = screen === "day" || transition?.mode === "toDay";
+
   return (
     <>
-      {view === "day" ? (
+      {renderMonth && (
+        <MonthView
+          today={today}
+          anchorDate={selectedDate}
+          events={events}
+          calendars={calendars}
+          onSelectDate={handleSelectDateFromMonth}
+          transition={
+            transition
+              ? {
+                  selectedWeekKey: transition.selectedWeekKey,
+                  mode: transition.mode === "toDay" ? "exit" : "enter",
+                  armed: transition.armed,
+                }
+              : null
+          }
+        />
+      )}
+
+      {renderDay && (
         <DayView
           today={today}
           selectedDate={selectedDate}
@@ -52,16 +169,33 @@ export function CalendarApp() {
           reminders={reminders}
           calendars={calendars}
           onSelectDate={(date) => setSelectedDate(startOfDay(date))}
-          onBack={() => setView("month")}
+          onBack={handleBackToMonth}
           onSelectEvent={(event) => setOpenEventId(event.id)}
+          transition={
+            transition
+              ? {
+                  mode: transition.mode === "toDay" ? "enter" : "exit",
+                  armed: transition.armed,
+                  hiddenDayKeys: new Set(
+                    transition.weekDays
+                      .filter((_, i) => transition.fromRects[i] && transition.toRects?.[i] !== null)
+                      .map(dateKey),
+                  ),
+                }
+              : null
+          }
         />
-      ) : (
-        <MonthView
+      )}
+
+      {transition && (
+        <FlyingDayNumbers
+          days={transition.weekDays}
           today={today}
-          anchorDate={selectedDate}
-          events={events}
-          calendars={calendars}
-          onSelectDate={handleSelectDate}
+          activeDate={transition.date}
+          fromRects={transition.fromRects}
+          toRects={transition.toRects}
+          armed={transition.armed}
+          pillAppears={transition.mode === "toDay"}
         />
       )}
 

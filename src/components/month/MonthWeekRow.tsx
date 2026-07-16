@@ -1,11 +1,15 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import type { CalendarEvent, CalendarSource } from "@/lib/types";
 import type { MonthDay } from "@/lib/date-utils";
 import { computeWeekSlots, getDayCellBars } from "@/lib/month-layout";
 import { CALENDAR_COLORS } from "@/lib/colors";
-import { isSameDay } from "@/lib/date-utils";
+import { dateKey, isSameDay } from "@/lib/date-utils";
 import { MonthDayCell, type RenderedBar } from "./MonthDayCell";
+import { TRANSITION_MS, TRANSITION_EASE } from "@/lib/transition-constants";
+
+export type WeekTransitionPhase = "before" | "selected" | "after";
 
 interface MonthWeekRowProps {
   weekLabel: number;
@@ -14,6 +18,12 @@ interface MonthWeekRowProps {
   calendarsById: Map<string, CalendarSource>;
   today: Date;
   onSelectDate: (date: Date) => void;
+  /** Non-null while a month<->day transition is animating this row. */
+  transitionPhase?: WeekTransitionPhase | null;
+  /** "exit": row is leaving (was resting, animates off). "enter": row is arriving (was off, animates to resting). */
+  transitionMode?: "exit" | "enter" | null;
+  /** Flips true one frame after mount so the off/resting swap is observed by the browser as a transition. */
+  transitionArmed?: boolean;
 }
 
 export function MonthWeekRow({
@@ -23,6 +33,9 @@ export function MonthWeekRow({
   calendarsById,
   today,
   onSelectDate,
+  transitionPhase = null,
+  transitionMode = null,
+  transitionArmed = false,
 }: MonthWeekRowProps) {
   const weekDays = days.map((d) => d.date);
   const slots = computeWeekSlots(weekDays, events);
@@ -49,8 +62,28 @@ export function MonthWeekRow({
     }),
   );
 
+  // Off-screen resting state for each phase. "before" and "selected" rows
+  // both slide up and fade (numbers are represented by flying clones while
+  // selected); "after" rows just slide off the bottom, opaque the whole way.
+  const offTransform =
+    transitionPhase === "after" ? "translateY(100vh)" : "translateY(-100vh)";
+  const offOpacity = transitionPhase === "after" ? 1 : 0;
+
+  const isOff = transitionMode === "exit" ? transitionArmed : !transitionArmed;
+  const rowStyle: CSSProperties | undefined = transitionPhase
+    ? {
+        transform: isOff ? offTransform : "translateY(0)",
+        opacity: isOff ? offOpacity : 1,
+        transition: `transform ${TRANSITION_MS}ms ${TRANSITION_EASE}, opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
+      }
+    : undefined;
+
   return (
-    <div className="flex border-b border-black/[.06] dark:border-white/[.08]">
+    <div
+      data-cal-week={dateKey(weekDays[0])}
+      className="flex border-b border-black/[.06] dark:border-white/[.08]"
+      style={rowStyle}
+    >
       <div className="w-5 shrink-0 pt-1.5 text-right text-[11px] text-black/35 dark:text-white/35">
         {weekLabel}
       </div>
@@ -64,6 +97,7 @@ export function MonthWeekRow({
             bars={renderedPerDay[i].bars}
             overflowCount={renderedPerDay[i].overflowCount}
             onSelect={onSelectDate}
+            numberHidden={transitionPhase === "selected"}
           />
         ))}
       </div>
