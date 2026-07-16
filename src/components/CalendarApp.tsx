@@ -16,8 +16,17 @@ export function CalendarApp() {
   const [selectedDate, setSelectedDate] = useState(today);
   const [events, setEvents] = useState<CalendarEvent[]>(initialEvents);
   const [openEventId, setOpenEventId] = useState<string | null>(null);
-
-  const openEvent = events.find((e) => e.id === openEventId) ?? null;
+  // Kept mounted (even while closed) so Vaul's close/drag-to-dismiss
+  // animation has something to animate away, instead of the content
+  // vanishing the instant `open` flips to false. Updated during render
+  // (React's sanctioned "adjust state while rendering" pattern) rather than
+  // via an effect, since this is deriving state from props, not
+  // synchronizing with an external system.
+  const [sheetEvent, setSheetEvent] = useState<CalendarEvent | null>(null);
+  const liveOpenEvent = openEventId ? (events.find((e) => e.id === openEventId) ?? null) : null;
+  if (liveOpenEvent && liveOpenEvent !== sheetEvent) {
+    setSheetEvent(liveOpenEvent);
+  }
 
   function handleSelectDate(date: Date) {
     setSelectedDate(startOfDay(date));
@@ -56,12 +65,15 @@ export function CalendarApp() {
         />
       )}
 
-      {openEvent && (
+      {sheetEvent && (
         <EventDetailSheet
-          key={openEvent.id}
-          event={openEvent}
+          key={sheetEvent.id}
+          event={sheetEvent}
           calendars={calendars}
-          onClose={() => setOpenEventId(null)}
+          open={openEventId !== null}
+          onOpenChange={(isOpen) => {
+            if (!isOpen) setOpenEventId(null);
+          }}
           onSave={handleSaveEvent}
           onDelete={handleDeleteEvent}
         />

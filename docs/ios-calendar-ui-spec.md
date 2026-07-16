@@ -202,6 +202,12 @@ you tapped it from) — documented here as its own top-level surface, not nested
   Confirms one of §6.2's open animation questions (sheet vs. push vs. zoom-morph) as
   "sheet" — but the *entrance/exit animation itself* (slide up? grow from the tapped
   block?) still isn't provable from a still image; treat that motion as still unconfirmed.
+  **Implementation note:** built with the `vaul` drawer library rather than a hand-rolled
+  overlay — it provides real drag-to-dismiss physics, snap-back, and open/close spring
+  animation out of the box, closer to native feel than we'd get hand-rolling it without a
+  motion reference. `dismissible` is set to `false` while in edit mode, so a stray
+  swipe/backdrop-tap can't discard an in-progress edit — confirmed via an automated
+  drag-gesture test (swipe-down dismisses in view mode, is a no-op in edit mode).
 - **Rounded top corners** on the sheet, standard iOS sheet radius.
 - **No visible drag grabber** (the small gray pill some iOS sheets show top-center) in
   this screenshot — the sheet relies on its own X button instead. Don't add a grabber
