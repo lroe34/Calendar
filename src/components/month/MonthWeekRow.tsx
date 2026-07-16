@@ -27,7 +27,9 @@ export function MonthWeekRow({
   const weekDays = days.map((d) => d.date);
   const slots = computeWeekSlots(weekDays, events);
 
-  const perDay = weekDays.map((_, i) => getDayCellBars(slots, i));
+  // Blank (adjacent-month) cells never show bars here — that date's events
+  // render in its own month's section instead.
+  const perDay = weekDays.map((_, i) => (days[i].blank ? { bars: [], overflowCount: 0 } : getDayCellBars(slots, i)));
 
   const renderedPerDay: { bars: RenderedBar[]; overflowCount: number }[] = perDay.map(
     (cell, i) => ({
@@ -57,7 +59,7 @@ export function MonthWeekRow({
           <MonthDayCell
             key={day.date.toISOString()}
             date={day.date}
-            inCurrentMonth={day.inCurrentMonth}
+            blank={day.blank}
             isToday={isSameDay(day.date, today)}
             bars={renderedPerDay[i].bars}
             overflowCount={renderedPerDay[i].overflowCount}

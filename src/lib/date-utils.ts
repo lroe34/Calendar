@@ -88,15 +88,13 @@ export function getWeekLabel(date: Date): number {
 
 export interface MonthDay {
   date: Date;
-  inCurrentMonth: boolean;
+  /** True for the padding days before day 1 / after the last day of the month. */
+  blank: boolean;
 }
 
 export interface WeekRow {
   weekLabel: number;
   days: MonthDay[];
-  /** Month (0-11) this week is grouped under, keyed off its Thursday. */
-  primaryMonth: number;
-  primaryYear: number;
 }
 
 export interface MonthSection {
@@ -106,62 +104,47 @@ export interface MonthSection {
 }
 
 /**
- * Builds a continuous, deduplicated list of Sunday-start week rows spanning
- * `monthsBefore`..`monthsAfter` months around (year, month), grouped into
- * month sections. A week is assigned to the month containing its Thursday,
- * matching the boundary behavior observed in the reference screenshot (the
- * Jul 26 - Aug 1 week stays under "July"; "Aug" starts at Aug 2).
+ * Builds one month's Sunday-start week rows, independent of any adjacent
+ * month. Months don't share a row at their boundary: the leading/trailing
+ * days that would belong to another month are rendered as blank cells (no
+ * number, no bars) rather than grayed-out adjacent-month numbers, matching
+ * the reference (June's last row stops at its own last day; July's first
+ * row starts fresh at whatever weekday the 1st falls on).
  */
+function buildMonthSection(year: number, month: number): MonthSection {
+  const firstOfMonth = new Date(year, month, 1);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const lastOfMonth = new Date(year, month, daysInMonth);
+
+  const gridStart = addDays(firstOfMonth, -firstOfMonth.getDay());
+  const gridEnd = addDays(lastOfMonth, 6 - lastOfMonth.getDay());
+
+  const weeks: WeekRow[] = [];
+  let cursor = gridStart;
+  while (cursor.getTime() <= gridEnd.getTime()) {
+    const days: MonthDay[] = Array.from({ length: 7 }, (_, i) => {
+      const d = addDays(cursor, i);
+      return { date: d, blank: d.getMonth() !== month || d.getFullYear() !== year };
+    });
+    weeks.push({ weekLabel: getWeekLabel(cursor), days });
+    cursor = addDays(cursor, 7);
+  }
+
+  return { year, month, weeks };
+}
+
+/** Builds independent month sections spanning `monthsBefore`..`monthsAfter` around (year, month). */
 export function generateCalendarMonths(
   year: number,
   month: number,
   monthsBefore: number,
   monthsAfter: number,
 ): MonthSection[] {
-  const rangeStart = new Date(year, month - monthsBefore, 1);
-  const rangeEndExclusive = new Date(year, month + monthsAfter + 1, 1);
-
-  const firstWeekStart = startOfWeek(rangeStart);
-
   const sections: MonthSection[] = [];
-  let cursor = firstWeekStart;
-
-  while (cursor.getTime() < rangeEndExclusive.getTime()) {
-    const days: MonthDay[] = Array.from({ length: 7 }, (_, i) => {
-      const d = addDays(cursor, i);
-      return { date: d, inCurrentMonth: false };
-    });
-    const thursday = days[4].date;
-    const primaryMonth = thursday.getMonth();
-    const primaryYear = thursday.getFullYear();
-
-    for (const day of days) {
-      day.inCurrentMonth =
-        day.date.getMonth() === primaryMonth &&
-        day.date.getFullYear() === primaryYear;
-    }
-
-    const week: WeekRow = {
-      weekLabel: getWeekLabel(cursor),
-      days,
-      primaryMonth,
-      primaryYear,
-    };
-
-    let section = sections[sections.length - 1];
-    if (
-      !section ||
-      section.month !== primaryMonth ||
-      section.year !== primaryYear
-    ) {
-      section = { year: primaryYear, month: primaryMonth, weeks: [] };
-      sections.push(section);
-    }
-    section.weeks.push(week);
-
-    cursor = addDays(cursor, 7);
+  for (let offset = -monthsBefore; offset <= monthsAfter; offset++) {
+    const d = new Date(year, month + offset, 1);
+    sections.push(buildMonthSection(d.getFullYear(), d.getMonth()));
   }
-
   return sections;
 }
 

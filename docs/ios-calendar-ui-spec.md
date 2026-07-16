@@ -83,13 +83,14 @@ chrome, not the app — ignored below except where they affect safe-area layout.
   down the left margin, one per week row, sitting roughly at each row's top divider.
 - Thin horizontal divider lines separate week rows. No strong vertical gridlines between
   day columns (separation is by spacing only).
-- Adjacent-month overflow dates (e.g. June 27–30 in July's first row) render in light
-  gray, distinct from current-month dates in black. First row of July 2026 starts on
-  Wednesday, so S/M/T cells in that row are empty (no leading-month numerals shown in the
-  screenshot for that row — verify whether adjacent-month days are ever shown numerically
-  in-grid or left blank; the partial "27" visible at the very top of the screenshot is the
-  tail of the previous (June) row scrolled mostly off-screen, not a leading-days label in
-  July's own row).
+- **Months do not share a row at their boundary, confirmed via a follow-up close-up
+  screenshot.** A month's own grid is entirely self-contained: its last row stops at its
+  own last calendar day (trailing columns for the next month are simply blank — no
+  number, no bars, not even grayed-out), and the next month's first row starts fresh,
+  padded with blank leading columns up to whatever weekday its 1st falls on. There is no
+  "adjacent-month overflow date" rendering at all (superseding the original open
+  question about whether adjacent-month days show grayed numbers — they don't, they
+  just aren't shown in either month's grid).
 - **Row height is NOT fixed/uniform** — each week row auto-sizes to fit however many event
   bars + overflow text that week needs. A week with 2 bars + a "+N" line is taller than a
   lighter week. Do not hardcode a uniform 6-row grid height.
@@ -163,9 +164,12 @@ chrome, not the app — ignored below except where they affect safe-area layout.
   between the 4 PM and 5 PM lines, not aligned to a line.
 
 ### 3.4 Event blocks
-- Each event block has a **left-edge vertical color accent bar** (~3px) plus a lighter
-  tinted fill of the same hue for the rest of the block (two-part coloring: solid accent
-  + ~15–20%-opacity tint fill) — not a flat solid-color block.
+- Each event block has a **left-edge vertical color accent, rendered as an inset rounded
+  capsule** (not a flush full-height border/bar) — inset a few px from the block's top,
+  bottom, and left edges, rounded-full caps — plus a lighter tinted fill of the same hue
+  for the rest of the block (two-part coloring: solid accent capsule + ~15–20%-opacity
+  tint fill) — not a flat solid-color block, and not a flush edge-to-edge bar. Confirmed
+  via a close-up follow-up screenshot.
 - **Recurring events show a small looped-arrow icon** in the top-right of the block.
   One-time events (e.g. Hinge Health, the flight) do not have this icon. Don't drop this
   glyph — it's a distinct semantic marker from the color/shape.
@@ -236,9 +240,12 @@ ICS→UI mapping might miss:
    Calendar events, visually distinguished by the outline-circle glyph + muted text
    treatment observed in §3.2. Data model needs a reminder/task entity distinct from
    VEVENT, with its own due date and completion state.
-4. **Leading/trailing adjacent-month days in Month view** — still unconfirmed whether
-   they render event bars; treat as blank (numerals only, grayed) until we see a
-   screenshot proving otherwise. Low risk either way, cheap to adjust later.
+4. **Resolved via follow-up screenshot**: months don't share a row at their boundary at
+   all. See the updated §2.2 — each month's grid is self-contained, with blank
+   (numberless, barless) leading/trailing cells rather than grayed adjacent-month
+   numbers. The month-label header sits inline (not sticky) positioned horizontally
+   above whatever column the 1st falls on; the single pinned title in the nav chrome is
+   what increments as you scroll past each month.
 5. **New event/reminder creation flow** (`+` button target) — still no reference
    screenshot; will design when we get there or when one is provided.
 6. **Week view** — still unconfirmed whether it exists as a distinct zoom level (vs.
@@ -331,7 +338,8 @@ Concrete list of things that are easy to skip, approximate, or get subtly wrong:
 - [ ] Recurring-event icon on Day view blocks, correctly present/absent per RRULE.
 - [ ] Progressive detail disclosure inside event blocks based on rendered height/duration
       (title-only vs. title+location+time), not a fixed template per event.
-- [ ] Two-part event block coloring: solid left accent bar + separate lighter tint fill.
+- [ ] Two-part event block coloring: inset rounded-capsule left accent (not a flush
+      border) + separate lighter tint fill.
 - [ ] Mini week-strip in Day view is interactive/independent, not a static label row.
 - [ ] All bars/blocks use per-calendar color pulled from the data model, never hardcoded
       per screen.

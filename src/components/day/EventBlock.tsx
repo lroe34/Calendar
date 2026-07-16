@@ -40,7 +40,10 @@ export function EventBlock({ event, colorName, columnIndex, columnCount }: Event
         backgroundColor: color.tint,
       }}
     >
-      <div className="absolute inset-y-0 left-0 w-[3px]" style={{ backgroundColor: color.accent }} />
+      <div
+        className="absolute left-1 top-1 bottom-1 w-[3px] rounded-full"
+        style={{ backgroundColor: color.accent }}
+      />
       <div className="flex h-full flex-col gap-0.5 px-2 py-[3px]" style={{ color: color.text }}>
         <div className="flex items-start justify-between gap-1">
           <span className="truncate text-[12.5px] font-semibold leading-tight">{event.title}</span>

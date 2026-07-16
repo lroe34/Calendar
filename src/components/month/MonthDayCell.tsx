@@ -11,21 +11,16 @@ export interface RenderedBar {
 
 interface MonthDayCellProps {
   date: Date;
-  inCurrentMonth: boolean;
+  blank: boolean;
   isToday: boolean;
   bars: RenderedBar[];
   overflowCount: number;
   onSelect: (date: Date) => void;
 }
 
-export function MonthDayCell({
-  date,
-  inCurrentMonth,
-  isToday,
-  bars,
-  overflowCount,
-  onSelect,
-}: MonthDayCellProps) {
+export function MonthDayCell({ date, blank, isToday, bars, overflowCount, onSelect }: MonthDayCellProps) {
+  if (blank) return <div />;
+
   return (
     <button
       onClick={() => onSelect(date)}
@@ -36,9 +31,7 @@ export function MonthDayCell({
           className={
             isToday
               ? "flex h-7 w-7 items-center justify-center rounded-full bg-red-500 text-[17px] font-semibold text-white"
-              : `flex h-7 w-7 items-center justify-center text-[17px] ${
-                  inCurrentMonth ? "text-black dark:text-white" : "text-black/30 dark:text-white/25"
-                }`
+              : "flex h-7 w-7 items-center justify-center text-[17px] text-black dark:text-white"
           }
         >
           {date.getDate()}

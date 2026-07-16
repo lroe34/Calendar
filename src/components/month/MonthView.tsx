@@ -50,9 +50,9 @@ export function MonthView({ today, anchorDate, events, calendars, onSelectDate }
     const container = scrollRef.current;
     const target = sectionRefs.current[index];
     if (!container || !target) return;
-    // CSS `position: sticky` doesn't reserve space for its stuck offset, so a
-    // naive scrollIntoView leaves this section's own sticky title overlapping
-    // its first row. Compensate by scrolling exactly that offset less far.
+    // The nav+weekday header is sticky and doesn't reserve flow space, so a
+    // naive scroll-to-top would tuck this section's first row behind it.
+    // Compensate by scrolling exactly that header's height less far.
     const top = target.offsetTop - STICKY_HEADER_OFFSET_PX;
     container.scrollTo({ top: Math.max(0, top), behavior: smooth ? "smooth" : "auto" });
   }
@@ -98,30 +98,46 @@ export function MonthView({ today, anchorDate, events, calendars, onSelectDate }
       <div ref={scrollRef} className="no-scrollbar absolute inset-0 overflow-y-auto pb-28">
         <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-xl dark:bg-black/80">
           <TopNavBar backLabel={`${visibleSection.year}`} onBack={() => {}} />
+          <div className="px-4 pb-1 pt-1">
+            <h1 className="text-[34px] font-bold leading-tight">
+              {MONTH_NAMES[visibleSection.month]}
+            </h1>
+          </div>
           <MonthWeekdayHeader highlightColumn={todayColumn} />
         </div>
 
-        {sections.map((section, i) => (
-          <div key={`${section.year}-${section.month}`} ref={(el) => { sectionRefs.current[i] = el; }}>
-            <div
-              className="sticky z-10 bg-white/95 px-4 pb-1 pt-2 backdrop-blur-xl dark:bg-black/80"
-              style={{ top: STICKY_HEADER_OFFSET_PX }}
-            >
-              <h1 className="text-[34px] font-bold leading-tight">{MONTH_NAMES[section.month]}</h1>
+        {sections.map((section, i) => {
+          const firstOfMonthColumn = new Date(section.year, section.month, 1).getDay();
+          // Clamp so the label never starts so close to the right edge that
+          // a long month name (e.g. "September") would run off-screen.
+          const labelColumn = Math.min(firstOfMonthColumn, 4);
+          return (
+            <div key={`${section.year}-${section.month}`} ref={(el) => { sectionRefs.current[i] = el; }}>
+              <div className="flex px-4 pb-1 pt-4">
+                <div className="w-5 shrink-0" />
+                <div className="grid grow grid-cols-7">
+                  <h2
+                    className="whitespace-nowrap text-[26px] font-bold leading-tight"
+                    style={{ gridColumnStart: labelColumn + 1 }}
+                  >
+                    {MONTH_NAMES[section.month]}
+                  </h2>
+                </div>
+              </div>
+              {section.weeks.map((week) => (
+                <MonthWeekRow
+                  key={week.days[0].date.toISOString()}
+                  weekLabel={week.weekLabel}
+                  days={week.days}
+                  events={events}
+                  calendarsById={calendarsById}
+                  today={today}
+                  onSelectDate={onSelectDate}
+                />
+              ))}
             </div>
-            {section.weeks.map((week) => (
-              <MonthWeekRow
-                key={week.days[0].date.toISOString()}
-                weekLabel={week.weekLabel}
-                days={week.days}
-                events={events}
-                calendarsById={calendarsById}
-                today={today}
-                onSelectDate={onSelectDate}
-              />
-            ))}
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="absolute inset-x-0 bottom-0 z-20">
