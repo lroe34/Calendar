@@ -13,7 +13,7 @@ export function BottomBar({ onToday, onGridView, onInbox }: BottomBarProps) {
     <div className="pointer-events-none flex items-end justify-between px-4 pb-4 pt-6">
       <button
         onClick={onToday}
-        className="pointer-events-auto rounded-full bg-white/70 px-5 py-2.5 text-[15px] font-medium text-black shadow-sm backdrop-blur-xl active:bg-white/90 dark:bg-black/60 dark:text-white"
+        className="pointer-events-auto rounded-full bg-white/70 px-5 py-2.5 text-[15px] font-medium text-black backdrop-blur-xl active:bg-white/90 dark:bg-black/60 dark:text-white"
       >
         Today
       </button>

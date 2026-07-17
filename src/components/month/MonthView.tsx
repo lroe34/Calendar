@@ -132,17 +132,15 @@ export function MonthView({
     <div className={`fixed inset-0 overflow-hidden ${transition ? "pointer-events-none" : ""}`}>
       <div ref={scrollRef} className="no-scrollbar absolute inset-0 overflow-y-auto pb-28">
         <div className="sticky top-0 z-20">
-          {/* Invisible twin keeps the top-nav band in scroll/sticky flow —
-              the real toolbar is an absolute sibling so it can stack above
-              sliding "after" rows. */}
-          <div className="invisible" aria-hidden>
-            <TopNavBar backLabel={`${visibleSection.year}`} onBack={() => {}} />
-          </div>
-          {/* Backdrop lives here (not on the sticky wrapper) so it fades out
-              with this chrome during a transition instead of staying opaque
-              and covering the other view's header underneath for the whole
-              transition. */}
-          <div className="bg-white/90 backdrop-blur-xl dark:bg-black/80" style={chromeStyle}>
+          {/* Single frosted pane spanning the nav band height + header content
+              so there is one continuous backdrop-blur region — no seam. The
+              invisible twin lives inside it so its height is part of the same
+              blur surface, while the real toolbar is an absolute z-40 sibling
+              (transparent) that can stack above sliding "after" rows. */}
+          <div className="bg-white/60 backdrop-blur-sm dark:bg-black/60" style={chromeStyle}>
+            <div className="invisible" aria-hidden>
+              <TopNavBar backLabel={`${visibleSection.year}`} onBack={() => {}} />
+            </div>
             <div className="px-4 pb-1 pt-1">
               <h1 className="text-[34px] font-bold leading-tight">
                 {MONTH_NAMES[visibleSection.month]}
@@ -231,9 +229,7 @@ export function MonthView({
           z-index can sit above sliding "after" rows, and so the top bar isn't
           trapped under sticky week chrome. */}
       <div className="absolute inset-x-0 top-0 z-40" style={navStyle}>
-        <div className="bg-white/90 backdrop-blur-xl dark:bg-black/80">
-          <TopNavBar backLabel={`${visibleSection.year}`} onBack={() => {}} />
-        </div>
+        <TopNavBar backLabel={`${visibleSection.year}`} onBack={() => {}} />
       </div>
 
       <div className="absolute inset-x-0 bottom-0 z-40" style={navStyle}>

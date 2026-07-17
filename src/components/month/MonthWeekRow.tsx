@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import type { CalendarEvent, CalendarSource } from "@/lib/types";
 import type { MonthDay } from "@/lib/date-utils";
 import { computeWeekSlots, getDayCellBars } from "@/lib/month-layout";
@@ -62,35 +62,79 @@ export function MonthWeekRow({
     }),
   );
 
-  // Off-screen resting state for each phase. "before"/"after" rows slide up
-  // or down and fade out while exiting, but stay fully opaque while
-  // entering so they don't visibly fade in as they slide into place.
-  // "Selected" rows always fade (numbers are represented by flying clones
-  // while selected).
+  // Off-screen resting state for each phase. "before"/"selected" rows slide
+  // up; "after" rows slide down. Exit still fades via CSS; enter stays
+  // opaque and is driven by WAAPI (same paint-race fix as DayView) so a
+  // fresh MonthView mount can't skip the slide and teleport into place.
+  // Selected-week day numbers stay hidden on the row (`numberHidden`) and
+  // ride the flying clones instead — the rest of the row travels with this
+  // transform.
   const offTransform =
     transitionPhase === "after" ? "translateY(100vh)" : "translateY(-100vh)";
-  const offOpacity = transitionPhase === "selected" ? 0 : transitionMode === "exit" ? 0 : 1;
+  const offOpacity = transitionMode === "exit" ? 0 : 1;
 
   const isOff = transitionMode === "exit" ? transitionArmed : !transitionArmed;
-  // "After" rows only have to clear the viewport, not travel the full
-  // 100vh, so the default duration reads as an near-instant flick when
-  // they're leaving. Give that specific leg more time.
   const durationMs =
     transitionMode === "exit" && transitionPhase === "after" ? TRANSITION_MS_AFTER_EXIT : TRANSITION_MS;
-  const rowStyle: CSSProperties | undefined = transitionPhase
-    ? {
+
+  const rowRef = useRef<HTMLDivElement>(null);
+  const enterAnimRef = useRef<Animation | null>(null);
+  const hasStartedEnterAnimRef = useRef(false);
+  const [enterAnimStarted, setEnterAnimStarted] = useState(false);
+
+  useLayoutEffect(() => {
+    if (transitionMode !== "enter" || !transitionPhase || !transitionArmed) return;
+    if (hasStartedEnterAnimRef.current) return;
+    const el = rowRef.current;
+    if (!el) return;
+    hasStartedEnterAnimRef.current = true;
+
+    const anim = el.animate(
+      [
+        { transform: offTransform, opacity: 1 },
+        { transform: "translateY(0px)", opacity: 1 },
+      ],
+      { duration: durationMs, easing: TRANSITION_EASE },
+    );
+    enterAnimRef.current = anim;
+    setEnterAnimStarted(true);
+    anim.finished.then(() => anim.cancel()).catch(() => {});
+  }, [transitionMode, transitionPhase, transitionArmed, offTransform, durationMs]);
+
+  useEffect(() => {
+    return () => {
+      enterAnimRef.current?.cancel();
+      enterAnimRef.current = null;
+    };
+  }, []);
+
+  const isEnterAwaitingAnimation = transitionMode === "enter" && !enterAnimStarted;
+
+  let rowStyle: CSSProperties | undefined;
+  if (transitionPhase) {
+    if (transitionMode === "enter") {
+      // Hold the off transform with transitions suppressed until WAAPI takes
+      // over. Clearing transform once the anim starts matches DayView: after
+      // WAAPI cancel(), the element must not snap back to the off position.
+      rowStyle = {
+        transform: isEnterAwaitingAnimation ? offTransform : undefined,
+        opacity: 1,
+        transition: "none",
+        zIndex: transitionPhase === "after" ? 30 : undefined,
+      };
+    } else {
+      rowStyle = {
         transform: isOff ? offTransform : "translateY(0)",
         opacity: isOff ? offOpacity : 1,
-        // Keep "after" rows above sibling week chrome (and the day view
-        // beneath this month layer) while they slide, so they don't tuck
-        // under the selected/before rows mid-flight.
         zIndex: transitionPhase === "after" ? 30 : undefined,
         transition: `transform ${durationMs}ms ${TRANSITION_EASE}, opacity ${durationMs}ms ${TRANSITION_EASE}`,
-      }
-    : undefined;
+      };
+    }
+  }
 
   return (
     <div
+      ref={rowRef}
       data-cal-week={dateKey(weekDays[0])}
       className="relative grid grid-cols-7 border-b border-black/[.06] pb-4 dark:border-white/[.08]"
       style={rowStyle}

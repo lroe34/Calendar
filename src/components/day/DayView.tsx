@@ -277,15 +277,15 @@ export function DayView({
       </div>
 
       <div ref={headerRef} className="absolute inset-x-0 top-0 z-20">
-        {/* Invisible twin reserves height for the absolute z-40 toolbar. */}
-        <div className="invisible" aria-hidden>
-          <TopNavBar backLabel={MONTH_NAMES[selectedDate.getMonth()].slice(0, 3)} onBack={onBack} />
-        </div>
-        {/* Backdrop lives here (not on the absolute wrapper) so it fades out
-            with this chrome during a transition instead of staying opaque
-            and covering the other view's header underneath for the whole
-            transition. */}
-        <div className="bg-white/70 backdrop-blur-xl dark:bg-black/60" style={chromeStyle}>
+        {/* Single frosted pane spanning nav band + header content — one
+            continuous backdrop-blur region, no seam. The invisible twin lives
+            inside it so its height is part of the same blur surface. The real
+            toolbar is a transparent absolute z-40 sibling so it stacks above
+            sliding "after" rows without adding a second blur region. */}
+        <div className="bg-white/60 backdrop-blur-sm dark:bg-black/60 border-b border-black/[.06] dark:border-white/[.08]" style={chromeStyle}>
+          <div className="invisible" aria-hidden>
+            <TopNavBar backLabel={MONTH_NAMES[selectedDate.getMonth()].slice(0, 3)} onBack={onBack} />
+          </div>
           <MiniWeekStrip
             selectedDate={selectedDate}
             today={today}
@@ -300,9 +300,7 @@ export function DayView({
       </div>
 
       <div className="absolute inset-x-0 top-0 z-40" style={navStyle}>
-        <div className="bg-white/70 backdrop-blur-xl dark:bg-black/60">
-          <TopNavBar backLabel={MONTH_NAMES[selectedDate.getMonth()].slice(0, 3)} onBack={onBack} />
-        </div>
+        <TopNavBar backLabel={MONTH_NAMES[selectedDate.getMonth()].slice(0, 3)} onBack={onBack} />
       </div>
 
       <div className="absolute inset-x-0 bottom-0 z-40" style={navStyle}>
