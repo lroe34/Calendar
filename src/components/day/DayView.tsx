@@ -132,11 +132,26 @@ export function DayView({
   // Exiting content has no such race — it's already an existing, painted
   // element — so it keeps the simpler declarative transition.
   const contentAnimRef = useRef<Animation | null>(null);
+  // Mirrors contentAnimRef for the day-heading/all-day-lane group, which
+  // slides in lockstep with the scroll content (same distance, duration,
+  // easing) but leaves its fade to the shared chrome opacity transition
+  // below — it already lives inside that fading backdrop, so animating
+  // opacity here too would just double up on it.
+  const headerContentRef = useRef<HTMLDivElement>(null);
+  const headerContentAnimRef = useRef<Animation | null>(null);
   // Guards against re-triggering: CalendarApp hands down a fresh `transition`
   // object reference on every armed/etc. change, so this can't key off
   // object identity — it needs to fire exactly once per DayView mount (each
   // enter transition is itself a fresh mount, so a plain boolean is enough).
   const hasStartedEnterAnimRef = useRef(false);
+  // Mirrors contentAnimRef into state so starting the animation actually
+  // triggers the re-render that clears the placeholder below — a ref write
+  // alone is invisible to React and never repaints. Without this, the
+  // placeholder's inline opacity: 0 stays on the element for the whole
+  // animation; once WAAPI's own effect is cancelled on finish, the element
+  // reverts to that stale opacity: 0 instead of the neutral value, flashing
+  // the content invisible right as the animation settles.
+  const [enterAnimStarted, setEnterAnimStarted] = useState(false);
 
   useLayoutEffect(() => {
     // Wait for `armed` so this starts in the same commit as FlyingDayNumbers
@@ -162,17 +177,29 @@ export function DayView({
       { duration: TRANSITION_MS, easing: TRANSITION_EASE },
     );
     contentAnimRef.current = anim;
+    setEnterAnimStarted(true);
     anim.finished.then(() => anim.cancel()).catch(() => {});
+
+    const headerAnim = headerContentRef.current?.animate(
+      [{ transform: `translateY(${transition.slideDistancePx}px)` }, { transform: "translateY(0)" }],
+      { duration: TRANSITION_MS, easing: TRANSITION_EASE },
+    );
+    if (headerAnim) {
+      headerContentAnimRef.current = headerAnim;
+      headerAnim.finished.then(() => headerAnim.cancel()).catch(() => {});
+    }
   }, [transition]);
 
   useEffect(() => {
     return () => {
       contentAnimRef.current?.cancel();
       contentAnimRef.current = null;
+      headerContentAnimRef.current?.cancel();
+      headerContentAnimRef.current = null;
     };
   }, []);
 
-  const isEnterAwaitingAnimation = transition?.mode === "enter" && !contentAnimRef.current;
+  const isEnterAwaitingAnimation = transition?.mode === "enter" && !enterAnimStarted;
   const contentStyle = transition
     ? transition.mode === "enter"
       ? // Neutral placeholder until the WAAPI animation takes over (which,
@@ -182,6 +209,18 @@ export function DayView({
           opacity: chromeIsOff ? 0 : 1,
           transform: chromeIsOff ? `translateY(${transition.slideDistancePx ?? 0}px)` : "translateY(0)",
           transition: `opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}, transform ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
+        }
+    : undefined;
+
+  // Transform-only counterpart of contentStyle for the day-heading/all-day
+  // -lane group: same slide, but no opacity of its own since the wrapping
+  // backdrop below already fades it via chromeStyle.
+  const headerContentStyle = transition
+    ? transition.mode === "enter"
+      ? { transform: undefined, transition: "none" }
+      : {
+          transform: chromeIsOff ? `translateY(${transition.slideDistancePx ?? 0}px)` : "translateY(0)",
+          transition: `transform ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
         }
     : undefined;
 
@@ -226,8 +265,10 @@ export function DayView({
             onSelectDate={onSelectDate}
             hiddenDayKeys={transition?.hiddenDayKeys}
           />
-          <DayHeading date={selectedDate} />
-          <AllDayLane events={allDayEvents} reminders={dayReminders} calendarsById={calendarsById} />
+          <div ref={headerContentRef} style={headerContentStyle}>
+            <DayHeading date={selectedDate} />
+            <AllDayLane events={allDayEvents} reminders={dayReminders} calendarsById={calendarsById} />
+          </div>
         </div>
       </div>
 
