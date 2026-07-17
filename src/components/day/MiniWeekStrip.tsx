@@ -49,7 +49,7 @@ export function MiniWeekStrip({ selectedDate, today, onSelectDate, hiddenDayKeys
                 }}
               />
               <span
-                className={`relative text-[16px] ${
+                className={`relative text-[17px] ${
                   isSelected
                     ? `font-bold ${isToday ? "text-white" : "text-white dark:text-black"}`
                     : isToday

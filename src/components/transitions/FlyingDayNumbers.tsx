@@ -1,5 +1,6 @@
 "use client";
 
+import { useLayoutEffect, useRef } from "react";
 import { dateKey, isSameDay } from "@/lib/date-utils";
 import { TRANSITION_MS, TRANSITION_EASE } from "@/lib/transition-constants";
 
@@ -20,7 +21,7 @@ interface FlyingDayNumbersProps {
   fromRects: (FlyingRect | null)[];
   /** null until the entering view has mounted and its rects have been measured. */
   toRects: (FlyingRect | null)[] | null;
-  /** false = render at `fromRects` (pre-animation); true = render at `toRects` (post-animation). */
+  /** false = render at `fromRects` (pre-animation); true = start WAAPI fly to `toRects`. */
   armed: boolean;
   /**
    * Destination context. Day view's "selected" pill is `activeDate`; month
@@ -46,6 +47,46 @@ export function FlyingDayNumbers({
   const pillFromDate = pillAppears ? today : activeDate;
   const pillToDate = pillAppears ? activeDate : today;
 
+  // Each clone is anchored at its fromRect and moved via WAAPI translate so
+  // it runs on the same animation engine as DayView's content slide —
+  // identical driver, identical easing, identical start frame.
+  const cloneRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const animRefs = useRef<(Animation | null)[]>([]);
+  const hasArmedRef = useRef(false);
+
+  useLayoutEffect(() => {
+    if (!armed || !toRects || hasArmedRef.current) return;
+    hasArmedRef.current = true;
+
+    days.forEach((_, i) => {
+      const from = fromRects[i];
+      const to = toRects[i];
+      // Null dest means no destination cell — element isn't rendered.
+      if (!from || to === null) return;
+      const el = cloneRefs.current[i];
+      if (!el) return;
+
+      const dx = (to?.left ?? from.left) - from.left;
+      const dy = (to?.top ?? from.top) - from.top;
+
+      const anim = el.animate(
+        [
+          { transform: "translate(0px, 0px)" },
+          { transform: `translate(${dx}px, ${dy}px)` },
+        ],
+        { duration: TRANSITION_MS, easing: TRANSITION_EASE, fill: "forwards" },
+      );
+      animRefs.current[i] = anim;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [armed, toRects]);
+
+  useLayoutEffect(() => {
+    return () => {
+      animRefs.current.forEach((a) => a?.cancel());
+    };
+  }, []);
+
   return (
     <div className="pointer-events-none fixed inset-0 z-30">
       {days.map((date, i) => {
@@ -55,22 +96,22 @@ export function FlyingDayNumbers({
         // month boundary blank day) — let the plain content fade handle it.
         if (toRects && toRects[i] === null) return null;
 
-        const to = toRects ? toRects[i] : null;
-        const target = to ?? from;
-        const shown = armed ? target : from;
         const isToday = isSameDay(date, today);
         const pillVisible = isSameDay(date, armed ? pillToDate : pillFromDate);
 
         return (
           <div
             key={dateKey(date)}
+            ref={(el) => {
+              cloneRefs.current[i] = el;
+            }}
             className="absolute"
             style={{
-              left: shown.left,
-              top: shown.top,
-              width: shown.width,
-              height: shown.height,
-              transition: `left ${TRANSITION_MS}ms ${TRANSITION_EASE}, top ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
+              left: from.left,
+              top: from.top,
+              width: from.width,
+              height: from.height,
+              // No CSS transition — WAAPI handles the fly via translate.
             }}
           >
             <div
@@ -82,7 +123,7 @@ export function FlyingDayNumbers({
               }}
             />
             <span
-              className={`relative flex h-full w-full items-center justify-center text-[16px] ${
+              className={`relative flex h-full w-full items-center justify-center text-[17px] ${
                 pillVisible
                   ? `font-bold ${isToday ? "text-white" : "text-white dark:text-black"}`
                   : isToday

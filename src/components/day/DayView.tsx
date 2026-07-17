@@ -113,24 +113,18 @@ export function DayView({
       }
     : undefined;
 
-  // Match the scroll-content slide to the flying day-numbers' vertical
-  // travel (month week ↔ mini strip), so the grid appears to rise with the
-  // dates. Distance comes from the same fromRects/toRects FlyingDayNumbers
-  // uses — not a local re-measure — so the motions stay locked.
+  // Both enter and exit use WAAPI so they share the same animation driver as
+  // FlyingDayNumbers — identical engine, easing, and start frame for all
+  // three elements across the full 400ms.
   //
-  // The entering case is driven imperatively via the Web Animations API
-  // instead of a declarative CSS transition. A CSS transition here would
-  // need the browser to have actually painted the pre-animation ("off")
-  // frame before the armed flip changes it — normally guaranteed by
-  // waiting two requestAnimationFrame ticks, but this element is a brand
-  // -new mount with a lot of subtree to lay out, and under real-world load
-  // (HMR, devtools, a slow machine) those two rAFs can both fire before the
-  // browser gets an actual paint in between, silently skipping the
-  // animation entirely. WAAPI's animate() starts playing on its own timeline
-  // the instant it's called, with no dependency on paint timing.
+  // Enter: WAAPI avoids paint-timing races on a fresh mount. A CSS transition
+  // needs the browser to paint the pre-animation frame between the two rAFs;
+  // under load those rAFs can both fire before any paint, silently skipping
+  // the animation. WAAPI starts on its own timeline the instant animate() is
+  // called, with no paint dependency.
   //
-  // Exiting content has no such race — it's already an existing, painted
-  // element — so it keeps the simpler declarative transition.
+  // Exit: existing painted element, so no race — but using WAAPI matches the
+  // driver so progress curves stay locked with enter and the flying numbers.
   const contentAnimRef = useRef<Animation | null>(null);
   // Mirrors contentAnimRef for the day-heading/all-day-lane group, which
   // slides in lockstep with the scroll content (same distance, duration,
@@ -152,6 +146,8 @@ export function DayView({
   // reverts to that stale opacity: 0 instead of the neutral value, flashing
   // the content invisible right as the animation settles.
   const [enterAnimStarted, setEnterAnimStarted] = useState(false);
+  // Exit guard: same once-per-mode-per-mount pattern as enter.
+  const hasStartedExitAnimRef = useRef(false);
 
   useLayoutEffect(() => {
     // Wait for `armed` so this starts in the same commit as FlyingDayNumbers
@@ -172,7 +168,7 @@ export function DayView({
     const anim = el.animate(
       [
         { transform: `translateY(${transition.slideDistancePx}px)`, opacity: 0 },
-        { transform: "translateY(0)", opacity: 1 },
+        { transform: "translateY(0px)", opacity: 1 },
       ],
       { duration: TRANSITION_MS, easing: TRANSITION_EASE },
     );
@@ -181,13 +177,49 @@ export function DayView({
     anim.finished.then(() => anim.cancel()).catch(() => {});
 
     const headerAnim = headerContentRef.current?.animate(
-      [{ transform: `translateY(${transition.slideDistancePx}px)` }, { transform: "translateY(0)" }],
+      [
+        { transform: `translateY(${transition.slideDistancePx}px)` },
+        { transform: "translateY(0px)" },
+      ],
       { duration: TRANSITION_MS, easing: TRANSITION_EASE },
     );
     if (headerAnim) {
       headerContentAnimRef.current = headerAnim;
       headerAnim.finished.then(() => headerAnim.cancel()).catch(() => {});
     }
+  }, [transition]);
+
+  useLayoutEffect(() => {
+    if (
+      !transition ||
+      transition.mode !== "exit" ||
+      transition.slideDistancePx == null ||
+      !transition.armed
+    ) {
+      return;
+    }
+    if (hasStartedExitAnimRef.current) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    hasStartedExitAnimRef.current = true;
+
+    const anim = el.animate(
+      [
+        { transform: "translateY(0px)", opacity: 1 },
+        { transform: `translateY(${transition.slideDistancePx}px)`, opacity: 0 },
+      ],
+      { duration: TRANSITION_MS, easing: TRANSITION_EASE, fill: "forwards" },
+    );
+    contentAnimRef.current = anim;
+
+    const headerAnim = headerContentRef.current?.animate(
+      [
+        { transform: "translateY(0px)" },
+        { transform: `translateY(${transition.slideDistancePx}px)` },
+      ],
+      { duration: TRANSITION_MS, easing: TRANSITION_EASE, fill: "forwards" },
+    );
+    if (headerAnim) headerContentAnimRef.current = headerAnim;
   }, [transition]);
 
   useEffect(() => {
@@ -205,11 +237,9 @@ export function DayView({
       ? // Neutral placeholder until the WAAPI animation takes over (which,
         // once playing, overrides these inline values for its properties).
         { opacity: isEnterAwaitingAnimation ? 0 : undefined, transform: undefined, transition: "none" }
-      : {
-          opacity: chromeIsOff ? 0 : 1,
-          transform: chromeIsOff ? `translateY(${transition.slideDistancePx ?? 0}px)` : "translateY(0)",
-          transition: `opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}, transform ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
-        }
+      : // Exit: WAAPI drives the slide/fade; suppress CSS transitions so they
+        // don't fight the WAAPI effect.
+        { transition: "none" }
     : undefined;
 
   // Transform-only counterpart of contentStyle for the day-heading/all-day
@@ -218,10 +248,7 @@ export function DayView({
   const headerContentStyle = transition
     ? transition.mode === "enter"
       ? { transform: undefined, transition: "none" }
-      : {
-          transform: chromeIsOff ? `translateY(${transition.slideDistancePx ?? 0}px)` : "translateY(0)",
-          transition: `transform ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
-        }
+      : { transition: "none" }
     : undefined;
 
   // Top/bottom toolbars crossfade with the rest of the chrome (back label
