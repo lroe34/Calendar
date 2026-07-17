@@ -231,6 +231,11 @@ export function CalendarApp() {
                         .filter((_, i) => transition.fromRects[i] && transition.toRects?.[i] !== null)
                         .map(dateKey),
                     ),
+                    // Month-side day-number Ys so DayView can match its
+                    // content slide to the flying numbers' travel distance.
+                    peerNumberTops: (
+                      transition.mode === "toDay" ? transition.fromRects : transition.toRects
+                    )?.map((r) => r?.top ?? null) ?? [],
                   }
                 : null
             }

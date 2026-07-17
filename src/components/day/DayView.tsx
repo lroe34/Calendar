@@ -16,6 +16,12 @@ export interface DayViewTransition {
   mode: "exit" | "enter";
   armed: boolean;
   hiddenDayKeys: Set<string>;
+  /**
+   * Viewport Y of each week day-number in the month view (Sun..Sat). Used to
+   * match the scroll-content slide distance to how far those numbers travel
+   * into the mini week strip. Null entries are blank/missing cells.
+   */
+  peerNumberTops: (number | null)[];
 }
 
 interface DayViewProps {
@@ -106,17 +112,35 @@ export function DayView({
       }
     : undefined;
 
-  // The scrollable day content slides along with its fade — up into place
-  // while this view is entering, down and away while it's exiting — for a
-  // more deliberate month<->day transition. The mini week strip above stays
-  // on chromeStyle (opacity-only, no transform): FlyingDayNumbers measures
-  // its resting position mid-transition, which a moving transform would
-  // throw off.
-  const SLIDE_DISTANCE_PX = 32;
+  // Match the scroll-content slide to the flying day-numbers' vertical
+  // travel (month week row ↔ mini week strip) so the grid appears to rise
+  // and settle with the dates. Measured against the strip's resting layout —
+  // the strip itself stays on chromeStyle (opacity-only, no transform)
+  // because FlyingDayNumbers reads that resting position mid-transition.
+  const [slideDistancePx, setSlideDistancePx] = useState(0);
+
+  useLayoutEffect(() => {
+    if (!transition) {
+      setSlideDistancePx(0);
+      return;
+    }
+    const tops = transition.peerNumberTops;
+    const strip = headerRef.current?.querySelector<HTMLElement>("[data-cal-ministrip]");
+    if (!strip || tops.length === 0) return;
+
+    const nodes = strip.querySelectorAll<HTMLElement>("[data-cal-daynum]");
+    for (let i = 0; i < nodes.length; i++) {
+      const peerTop = tops[i];
+      if (peerTop == null) continue;
+      setSlideDistancePx(Math.abs(nodes[i].getBoundingClientRect().top - peerTop));
+      return;
+    }
+  }, [transition]);
+
   const contentStyle = transition
     ? {
         opacity: chromeIsOff ? 0 : 1,
-        transform: chromeIsOff ? `translateY(${SLIDE_DISTANCE_PX}px)` : "translateY(0)",
+        transform: chromeIsOff ? `translateY(${slideDistancePx}px)` : "translateY(0)",
         transition: `opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}, transform ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
       }
     : undefined;
