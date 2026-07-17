@@ -4,11 +4,13 @@ import { useLayoutEffect, useState } from "react";
 import { MonthView } from "@/components/month/MonthView";
 import { DayView } from "@/components/day/DayView";
 import { EventDetailSheet } from "@/components/event-sheet/EventDetailSheet";
+import { CalendarListDrawer } from "@/components/shared/CalendarListDrawer";
+import { CalendarEditDrawer } from "@/components/shared/CalendarEditDrawer";
 import { FlyingDayNumbers, type FlyingRect } from "@/components/transitions/FlyingDayNumbers";
-import { calendars, events as initialEvents, reminders } from "@/lib/mock-data";
+import { calendars as initialCalendars, events as initialEvents, reminders } from "@/lib/mock-data";
 import { addDays, dateKey, startOfDay, startOfWeek } from "@/lib/date-utils";
 import { TRANSITION_MS, TRANSITION_MS_AFTER_EXIT } from "@/lib/transition-constants";
-import type { CalendarEvent } from "@/lib/types";
+import type { CalendarEvent, CalendarSource } from "@/lib/types";
 
 type Screen = "month" | "day";
 
@@ -66,7 +68,16 @@ export function CalendarApp() {
   const [selectedDate, setSelectedDate] = useState(today);
   const [transition, setTransition] = useState<Transition | null>(null);
   const [events, setEvents] = useState<CalendarEvent[]>(initialEvents);
+  const [calendars, setCalendars] = useState<CalendarSource[]>(initialCalendars);
   const [openEventId, setOpenEventId] = useState<string | null>(null);
+  const [calendarListOpen, setCalendarListOpen] = useState(false);
+  const [editingCalendarId, setEditingCalendarId] = useState<string | null>(null);
+  const editingCalendar = editingCalendarId
+    ? (calendars.find((c) => c.id === editingCalendarId) ?? null)
+    : null;
+  const visibleEvents = events.filter(
+    (e) => calendars.find((c) => c.id === e.calendarId)?.visible !== false,
+  );
   // Kept mounted (even while closed) so Vaul's close/drag-to-dismiss
   // animation has something to animate away, instead of the content
   // vanishing the instant `open` flips to false. Updated during render
@@ -169,6 +180,14 @@ export function CalendarApp() {
     setOpenEventId(null);
   }
 
+  function handleToggleCalendar(id: string) {
+    setCalendars((prev) => prev.map((c) => (c.id === id ? { ...c, visible: !c.visible } : c)));
+  }
+
+  function handleSaveCalendar(updated: CalendarSource) {
+    setCalendars((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+  }
+
   const renderMonth = screen === "month" || transition?.mode === "toMonth";
   const renderDay = screen === "day" || transition?.mode === "toDay";
 
@@ -194,9 +213,10 @@ export function CalendarApp() {
           <MonthView
             today={today}
             anchorDate={selectedDate}
-            events={events}
+            events={visibleEvents}
             calendars={calendars}
             onSelectDate={handleSelectDateFromMonth}
+            onGridView={() => setCalendarListOpen(true)}
             transition={
               transition
                 ? {
@@ -215,12 +235,13 @@ export function CalendarApp() {
           <DayView
             today={today}
             selectedDate={selectedDate}
-            events={events}
+            events={visibleEvents}
             reminders={reminders}
             calendars={calendars}
             onSelectDate={(date) => setSelectedDate(startOfDay(date))}
             onBack={handleBackToMonth}
             onSelectEvent={(event) => setOpenEventId(event.id)}
+            onGridView={() => setCalendarListOpen(true)}
             transition={
               transition
                 ? {
@@ -268,6 +289,24 @@ export function CalendarApp() {
           onDelete={handleDeleteEvent}
         />
       )}
+
+      <CalendarListDrawer
+        calendars={calendars}
+        open={calendarListOpen}
+        onOpenChange={setCalendarListOpen}
+        onToggleCalendar={handleToggleCalendar}
+        onEditCalendar={(id) => setEditingCalendarId(id)}
+      />
+
+      <CalendarEditDrawer
+        key={editingCalendar?.id}
+        calendar={editingCalendar}
+        open={editingCalendarId !== null}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) setEditingCalendarId(null);
+        }}
+        onSave={handleSaveCalendar}
+      />
     </>
   );
 }
