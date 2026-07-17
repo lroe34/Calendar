@@ -1,6 +1,7 @@
 "use client";
 
 import { WEEKDAY_LETTERS, dateKey, isSameDay, startOfWeek, addDays } from "@/lib/date-utils";
+import { TRANSITION_MS, TRANSITION_EASE } from "@/lib/transition-constants";
 
 interface MiniWeekStripProps {
   selectedDate: Date;
@@ -33,15 +34,31 @@ export function MiniWeekStrip({ selectedDate, today, onSelectDate, hiddenDayKeys
             <span
               data-cal-daynum={key}
               style={hidden ? { opacity: 0 } : undefined}
-              className={
-                isToday
-                  ? "flex h-7 w-7 items-center justify-center rounded-full bg-red-500 text-[16px] font-semibold text-white"
-                  : isSelected
-                    ? "flex h-7 w-7 items-center justify-center rounded-full bg-black/10 text-[16px] font-medium text-black dark:bg-white/15 dark:text-white"
-                    : "flex h-7 w-7 items-center justify-center text-[16px] text-black dark:text-white"
-              }
+              className="relative flex h-7 w-7 items-center justify-center"
             >
-              {date.getDate()}
+              {/* Always mounted (never conditionally rendered) so toggling
+                  `isSelected` transitions opacity/scale instead of just
+                  popping the highlight in and out. */}
+              <span
+                aria-hidden
+                className={`absolute inset-0 rounded-full ${isToday ? "bg-red-500" : "bg-black dark:bg-white"}`}
+                style={{
+                  opacity: isSelected ? 1 : 0,
+                  transform: isSelected ? "scale(1)" : "scale(0.8)",
+                  transition: `opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}, transform ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
+                }}
+              />
+              <span
+                className={`relative text-[16px] ${
+                  isSelected
+                    ? `font-bold ${isToday ? "text-white" : "text-white dark:text-black"}`
+                    : isToday
+                      ? "text-red-500"
+                      : "text-black dark:text-white"
+                }`}
+              >
+                {date.getDate()}
+              </span>
             </span>
           </button>
         );
