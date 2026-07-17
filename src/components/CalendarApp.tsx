@@ -22,7 +22,25 @@ interface Transition {
   weekDays: Date[];
   fromRects: (FlyingRect | null)[];
   toRects: (FlyingRect | null)[] | null;
+  /**
+   * Vertical distance the flying day-numbers travel (month week ↔ mini strip).
+   * Null until `toRects` are measured; DayView uses this for its content slide.
+   */
+  slideDistancePx: number | null;
   armed: boolean;
+}
+
+/** How far the week day-numbers move between the two measured layouts. */
+function verticalTravelPx(
+  fromRects: (FlyingRect | null)[],
+  toRects: (FlyingRect | null)[],
+): number {
+  for (let i = 0; i < fromRects.length; i++) {
+    const from = fromRects[i];
+    const to = toRects[i];
+    if (from && to) return Math.abs(from.top - to.top);
+  }
+  return 0;
 }
 
 function measureRects(selector: (key: string) => string, weekDays: Date[]): (FlyingRect | null)[] {
@@ -105,6 +123,7 @@ export function CalendarApp() {
       weekDays,
       fromRects: measureMonthRects(weekDays),
       toRects: null,
+      slideDistancePx: null,
       armed: false,
     });
     setSelectedDate(startOfDay(date));
@@ -120,23 +139,37 @@ export function CalendarApp() {
       weekDays,
       fromRects: measureMiniStripRects(weekDays),
       toRects: null,
+      slideDistancePx: null,
       armed: false,
     });
   }
 
-  // Once the entering view has mounted, measure its target rects, then flip
-  // `armed` a frame later so the browser observes a from -> to transition.
-  // Measuring is deferred into a rAF (rather than done inline here) so the
-  // entering view's own mount effect (e.g. MonthView scrolling to the right
-  // section) has definitely settled first.
+  // Once the entering view has mounted, measure its target rects (and the
+  // day-number travel distance DayView slides by), then flip `armed` a
+  // frame later so the browser observes a from -> to transition.
+  //
+  // toDay can measure synchronously: DayView's mini strip is already at
+  // rest in this same commit, and we need slideDistancePx before the first
+  // paint so the content's "off" transform isn't stuck at 0.
+  // toMonth still defers into a rAF so MonthView's mount scroll can settle
+  // before we read month-cell rects.
   useLayoutEffect(() => {
     if (!transition || transition.toRects) return;
+
+    const applyToRects = (toRects: (FlyingRect | null)[]) => {
+      const slideDistancePx = verticalTravelPx(transition.fromRects, toRects);
+      setTransition((t) =>
+        t && !t.toRects ? { ...t, toRects, slideDistancePx } : t,
+      );
+    };
+
+    if (transition.mode === "toDay") {
+      applyToRects(measureMiniStripRects(transition.weekDays));
+      return;
+    }
+
     const raf = requestAnimationFrame(() => {
-      const toRects =
-        transition.mode === "toDay"
-          ? measureMiniStripRects(transition.weekDays)
-          : measureMonthRects(transition.weekDays);
-      setTransition((t) => (t && !t.toRects ? { ...t, toRects } : t));
+      applyToRects(measureMonthRects(transition.weekDays));
     });
     return () => cancelAnimationFrame(raf);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -191,13 +224,13 @@ export function CalendarApp() {
   const renderMonth = screen === "month" || transition?.mode === "toMonth";
   const renderDay = screen === "day" || transition?.mode === "toDay";
 
-  // The exiting view is what's visibly clearing away (weeks sliding/fading
-  // off), so it must stay stacked in front; the entering view sits behind,
-  // revealed as the exiting one moves out of the way. DOM order alone can't
-  // express this since it's the same fixed pair of components regardless of
-  // direction, so it's driven explicitly by z-index instead.
-  const monthZ = !transition ? undefined : transition.mode === "toDay" ? 2 : 1;
-  const dayZ = !transition ? undefined : transition.mode === "toDay" ? 1 : 2;
+  // Month stays above day in both directions. "After" week/month rows slide
+  // over the day layer (down on exit, up on enter); if day were stacked in
+  // front they'd get covered mid-flight. DOM order alone can't express this
+  // since it's the same fixed pair regardless of direction, so it's driven
+  // explicitly by z-index instead.
+  const monthZ = transition ? 2 : undefined;
+  const dayZ = transition ? 1 : undefined;
 
   // These wrappers are otherwise plain, unstyled boxes, but each one is
   // fixed and covers the full screen — a stray default `pointer-events: auto`
@@ -252,11 +285,7 @@ export function CalendarApp() {
                         .filter((_, i) => transition.fromRects[i] && transition.toRects?.[i] !== null)
                         .map(dateKey),
                     ),
-                    // Month-side day-number Ys so DayView can match its
-                    // content slide to the flying numbers' travel distance.
-                    peerNumberTops: (
-                      transition.mode === "toDay" ? transition.fromRects : transition.toRects
-                    )?.map((r) => r?.top ?? null) ?? [],
+                    slideDistancePx: transition.slideDistancePx,
                   }
                 : null
             }

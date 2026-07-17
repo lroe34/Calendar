@@ -155,6 +155,17 @@ export function formatHour(hour: number): string {
   return `${hour - 12} PM`;
 }
 
+/**
+ * Same label as formatHour, split into the numeric portion and the
+ * AM/PM/Noon suffix so callers can style each part independently.
+ */
+export function formatHourParts(hour: number): { value: string; period: string } {
+  if (hour === 12) return { value: "Noon", period: "" };
+  if (hour === 0) return { value: "12", period: "AM" };
+  if (hour < 12) return { value: `${hour}`, period: "AM" };
+  return { value: `${hour - 12}`, period: "PM" };
+}
+
 export function formatDayHeading(date: Date): string {
   return `${WEEKDAY_NAMES[date.getDay()]} – ${
     MONTH_ABBR[date.getMonth()]

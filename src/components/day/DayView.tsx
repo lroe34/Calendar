@@ -17,11 +17,10 @@ export interface DayViewTransition {
   armed: boolean;
   hiddenDayKeys: Set<string>;
   /**
-   * Viewport Y of each week day-number in the month view (Sun..Sat). Used to
-   * match the scroll-content slide distance to how far those numbers travel
-   * into the mini week strip. Null entries are blank/missing cells.
+   * Vertical travel of the flying day-numbers (month ↔ mini strip), or null
+   * until both ends have been measured. Content slides by this same distance.
    */
-  peerNumberTops: (number | null)[];
+  slideDistancePx: number | null;
 }
 
 interface DayViewProps {
@@ -115,45 +114,83 @@ export function DayView({
     : undefined;
 
   // Match the scroll-content slide to the flying day-numbers' vertical
-  // travel (month week row ↔ mini week strip) so the grid appears to rise
-  // and settle with the dates. Measured against the strip's resting layout —
-  // the strip itself stays on chromeStyle (opacity-only, no transform)
-  // because FlyingDayNumbers reads that resting position mid-transition.
-  const [slideDistancePx, setSlideDistancePx] = useState(0);
+  // travel (month week ↔ mini strip), so the grid appears to rise with the
+  // dates. Distance comes from the same fromRects/toRects FlyingDayNumbers
+  // uses — not a local re-measure — so the motions stay locked.
+  //
+  // The entering case is driven imperatively via the Web Animations API
+  // instead of a declarative CSS transition. A CSS transition here would
+  // need the browser to have actually painted the pre-animation ("off")
+  // frame before the armed flip changes it — normally guaranteed by
+  // waiting two requestAnimationFrame ticks, but this element is a brand
+  // -new mount with a lot of subtree to lay out, and under real-world load
+  // (HMR, devtools, a slow machine) those two rAFs can both fire before the
+  // browser gets an actual paint in between, silently skipping the
+  // animation entirely. WAAPI's animate() starts playing on its own timeline
+  // the instant it's called, with no dependency on paint timing.
+  //
+  // Exiting content has no such race — it's already an existing, painted
+  // element — so it keeps the simpler declarative transition.
+  const contentAnimRef = useRef<Animation | null>(null);
+  // Guards against re-triggering: CalendarApp hands down a fresh `transition`
+  // object reference on every armed/etc. change, so this can't key off
+  // object identity — it needs to fire exactly once per DayView mount (each
+  // enter transition is itself a fresh mount, so a plain boolean is enough).
+  const hasStartedEnterAnimRef = useRef(false);
 
   useLayoutEffect(() => {
-    if (!transition) {
-      setSlideDistancePx(0);
+    // Wait for `armed` so this starts in the same commit as FlyingDayNumbers
+    // (and the selected week's exit). Starting on slideDistancePx alone races
+    // ahead of the double-rAF arm in CalendarApp.
+    if (
+      !transition ||
+      transition.mode !== "enter" ||
+      transition.slideDistancePx == null ||
+      !transition.armed
+    ) {
       return;
     }
-    const tops = transition.peerNumberTops;
-    const strip = headerRef.current?.querySelector<HTMLElement>("[data-cal-ministrip]");
-    if (!strip || tops.length === 0) return;
-
-    const nodes = strip.querySelectorAll<HTMLElement>("[data-cal-daynum]");
-    for (let i = 0; i < nodes.length; i++) {
-      const peerTop = tops[i];
-      if (peerTop == null) continue;
-      setSlideDistancePx(Math.abs(nodes[i].getBoundingClientRect().top - peerTop));
-      return;
-    }
+    if (hasStartedEnterAnimRef.current) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    hasStartedEnterAnimRef.current = true;
+    const anim = el.animate(
+      [
+        { transform: `translateY(${transition.slideDistancePx}px)`, opacity: 0 },
+        { transform: "translateY(0)", opacity: 1 },
+      ],
+      { duration: TRANSITION_MS, easing: TRANSITION_EASE },
+    );
+    contentAnimRef.current = anim;
+    anim.finished.then(() => anim.cancel()).catch(() => {});
   }, [transition]);
 
+  useEffect(() => {
+    return () => {
+      contentAnimRef.current?.cancel();
+      contentAnimRef.current = null;
+    };
+  }, []);
+
+  const isEnterAwaitingAnimation = transition?.mode === "enter" && !contentAnimRef.current;
   const contentStyle = transition
-    ? {
-        opacity: chromeIsOff ? 0 : 1,
-        transform: chromeIsOff ? `translateY(${slideDistancePx}px)` : "translateY(0)",
-        transition: `opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}, transform ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
-      }
+    ? transition.mode === "enter"
+      ? // Neutral placeholder until the WAAPI animation takes over (which,
+        // once playing, overrides these inline values for its properties).
+        { opacity: isEnterAwaitingAnimation ? 0 : undefined, transform: undefined, transition: "none" }
+      : {
+          opacity: chromeIsOff ? 0 : 1,
+          transform: chromeIsOff ? `translateY(${transition.slideDistancePx ?? 0}px)` : "translateY(0)",
+          transition: `opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}, transform ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
+        }
     : undefined;
 
-  // The nav bar and bottom bar are pixel-identical, same-position UI chrome
-  // in both views, so they must never fade/move — only one copy (the
-  // exiting view's) stays visible; the entering view's copy stays invisible
-  // (but still laid out, to avoid a layout jump) until the transition ends
-  // and this view takes over for real.
-  const navVisible = !transition || transition.mode === "exit";
-  const navStyle = transition ? { opacity: navVisible ? 1 : 0, pointerEvents: navVisible ? undefined : ("none" as const) } : undefined;
+  // Top/bottom toolbars crossfade with the rest of the chrome (back label
+  // included) rather than freezing on the exiting copy. z-40 keeps them
+  // above sliding month "after" rows when this layer is on top; when it's
+  // underneath, the other view's fading toolbar leaves a hole so this one
+  // can show through.
+  const navStyle = chromeStyle;
 
   return (
     <div className={`fixed inset-0 overflow-hidden ${transition ? "pointer-events-none" : ""}`}>
@@ -174,7 +211,8 @@ export function DayView({
       </div>
 
       <div ref={headerRef} className="absolute inset-x-0 top-0 z-20">
-        <div className="bg-white/70 backdrop-blur-xl dark:bg-black/60" style={navStyle}>
+        {/* Invisible twin reserves height for the absolute z-40 toolbar. */}
+        <div className="invisible" aria-hidden>
           <TopNavBar backLabel={MONTH_NAMES[selectedDate.getMonth()].slice(0, 3)} onBack={onBack} />
         </div>
         {/* Backdrop lives here (not on the absolute wrapper) so it fades out
@@ -193,7 +231,13 @@ export function DayView({
         </div>
       </div>
 
-      <div className="absolute inset-x-0 bottom-0 z-20" style={navStyle}>
+      <div className="absolute inset-x-0 top-0 z-40" style={navStyle}>
+        <div className="bg-white/70 backdrop-blur-xl dark:bg-black/60">
+          <TopNavBar backLabel={MONTH_NAMES[selectedDate.getMonth()].slice(0, 3)} onBack={onBack} />
+        </div>
+      </div>
+
+      <div className="absolute inset-x-0 bottom-0 z-40" style={navStyle}>
         <BottomBar onToday={() => onSelectDate(today)} onGridView={onGridView} />
       </div>
     </div>

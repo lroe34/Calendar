@@ -79,6 +79,10 @@ export function MonthWeekRow({
     ? {
         transform: isOff ? offTransform : "translateY(0)",
         opacity: isOff ? offOpacity : 1,
+        // Keep "after" rows above sibling week chrome (and the day view
+        // beneath this month layer) while they slide, so they don't tuck
+        // under the selected/before rows mid-flight.
+        zIndex: transitionPhase === "after" ? 30 : undefined,
         transition: `transform ${durationMs}ms ${TRANSITION_EASE}, opacity ${durationMs}ms ${TRANSITION_EASE}`,
       }
     : undefined;

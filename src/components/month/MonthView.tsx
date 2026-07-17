@@ -122,19 +122,20 @@ export function MonthView({
       }
     : undefined;
 
-  // The nav bar and bottom bar are pixel-identical, same-position UI chrome
-  // in both views, so they must never fade/move — only one copy (the
-  // exiting view's) stays visible; the entering view's copy stays invisible
-  // (but still laid out, to avoid a layout jump) until the transition ends
-  // and this view takes over for real.
-  const navVisible = !transition || transition.mode === "exit";
-  const navStyle = transition ? { opacity: navVisible ? 1 : 0, pointerEvents: navVisible ? undefined : ("none" as const) } : undefined;
+  // Top/bottom toolbars sit above sliding "after" rows (z-30) and crossfade
+  // with the rest of the chrome so the back label can change mid-transition
+  // instead of staying frozen on the exiting copy (which would get covered
+  // once month is stacked over day).
+  const navStyle = chromeStyle;
 
   return (
     <div className={`fixed inset-0 overflow-hidden ${transition ? "pointer-events-none" : ""}`}>
       <div ref={scrollRef} className="no-scrollbar absolute inset-0 overflow-y-auto pb-28">
         <div className="sticky top-0 z-20">
-          <div className="bg-white/90 backdrop-blur-xl dark:bg-black/80" style={navStyle}>
+          {/* Invisible twin keeps the top-nav band in scroll/sticky flow —
+              the real toolbar is an absolute sibling so it can stack above
+              sliding "after" rows. */}
+          <div className="invisible" aria-hidden>
             <TopNavBar backLabel={`${visibleSection.year}`} onBack={() => {}} />
           </div>
           {/* Backdrop lives here (not on the sticky wrapper) so it fades out
@@ -181,6 +182,10 @@ export function MonthView({
                     : "translateY(-100vh)"
                   : "translateY(0)",
                 opacity: headerIsOff && headerPhase !== "after" ? 0 : 1,
+                // Match MonthWeekRow: "after" headers ride above the day
+                // layer / earlier weeks while they travel.
+                zIndex: headerPhase === "after" ? 30 : undefined,
+                position: headerPhase === "after" ? ("relative" as const) : undefined,
                 transition: `transform ${headerDurationMs}ms ${TRANSITION_EASE}, opacity ${headerDurationMs}ms ${TRANSITION_EASE}`,
               }
             : undefined;
@@ -219,7 +224,16 @@ export function MonthView({
         })}
       </div>
 
-      <div className="absolute inset-x-0 bottom-0 z-20" style={navStyle}>
+      {/* Toolbars are siblings of the scroll layer (not inside it) so their
+          z-index can sit above sliding "after" rows, and so the top bar isn't
+          trapped under sticky week chrome. */}
+      <div className="absolute inset-x-0 top-0 z-40" style={navStyle}>
+        <div className="bg-white/90 backdrop-blur-xl dark:bg-black/80">
+          <TopNavBar backLabel={`${visibleSection.year}`} onBack={() => {}} />
+        </div>
+      </div>
+
+      <div className="absolute inset-x-0 bottom-0 z-40" style={navStyle}>
         <BottomBar onToday={handleToday} onGridView={onGridView} />
       </div>
     </div>

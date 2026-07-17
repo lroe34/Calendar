@@ -1,6 +1,6 @@
 import type { CalendarEvent, CalendarSource } from "@/lib/types";
 import { HOUR_HEIGHT_PX } from "@/lib/day-grid";
-import { formatHour } from "@/lib/date-utils";
+import { formatHourParts } from "@/lib/date-utils";
 import { layoutOverlappingEvents, SOLO_LAYOUT } from "@/lib/event-layout";
 import { EventBlock } from "./EventBlock";
 import { CurrentTimeLine } from "./CurrentTimeLine";
@@ -22,20 +22,24 @@ export function HourGrid({ events, calendarsById, isToday, onSelectEvent }: Hour
 
   return (
     <div className="relative" style={{ height: HOUR_HEIGHT_PX * 24 }}>
-      {Array.from({ length: 24 }, (_, hour) => (
-        <div
-          key={hour}
-          className="absolute inset-x-0 border-t border-black/[.07] dark:border-white/[.1]"
-          style={{ top: hour * HOUR_HEIGHT_PX }}
-        >
-          <span
-            className="absolute -translate-y-1/2 text-right text-[11px] text-black/40 dark:text-white/40"
-            style={{ left: 4, width: GUTTER_WIDTH_PX - 10 }}
+      {Array.from({ length: 24 }, (_, hour) => {
+        const { value, period } = formatHourParts(hour);
+        return (
+          <div
+            key={hour}
+            className="absolute inset-x-0 border-t border-black/[.07] ml-12 dark:border-white/[.1]"
+            style={{ top: hour * HOUR_HEIGHT_PX }}
           >
-            {formatHour(hour)}
-          </span>
-        </div>
-      ))}
+            <span
+              className="absolute -translate-y-1/2 -translate-x-14 text-right text-[11px] text-black/40 dark:text-white/40"
+              style={{ left: 4, width: GUTTER_WIDTH_PX - 10 }}
+            >
+              <span className="font-medium text-black/60 dark:text-white/60 text-[12px]">{value}</span>
+              {period && <span className="ml-0.5 text-[9px]">{period}</span>}
+            </span>
+          </div>
+        );
+      })}
 
       <div className="absolute inset-y-0" style={{ left: GUTTER_WIDTH_PX, right: 8 }}>
         {events.map((event) => {
