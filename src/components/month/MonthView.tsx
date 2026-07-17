@@ -131,16 +131,20 @@ export function MonthView({
   return (
     <div className={`fixed inset-0 overflow-hidden ${transition ? "pointer-events-none" : ""}`}>
       <div ref={scrollRef} className="no-scrollbar absolute inset-0 overflow-y-auto pb-28">
-        <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-xl dark:bg-black/80">
-          <div style={navStyle}>
+        <div className="sticky top-0 z-20">
+          <div className="bg-white/90 backdrop-blur-xl dark:bg-black/80" style={navStyle}>
             <TopNavBar backLabel={`${visibleSection.year}`} onBack={() => {}} />
           </div>
-          <div className="px-4 pb-1 pt-1" style={chromeStyle}>
-            <h1 className="text-[34px] font-bold leading-tight">
-              {MONTH_NAMES[visibleSection.month]}
-            </h1>
-          </div>
-          <div style={chromeStyle}>
+          {/* Backdrop lives here (not on the sticky wrapper) so it fades out
+              with this chrome during a transition instead of staying opaque
+              and covering the other view's header underneath for the whole
+              transition. */}
+          <div className="bg-white/90 backdrop-blur-xl dark:bg-black/80" style={chromeStyle}>
+            <div className="px-4 pb-1 pt-1">
+              <h1 className="text-[34px] font-bold leading-tight">
+                {MONTH_NAMES[visibleSection.month]}
+              </h1>
+            </div>
             <MonthWeekdayHeader highlightColumn={todayColumn} />
           </div>
         </div>

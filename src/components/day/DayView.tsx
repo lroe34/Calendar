@@ -125,11 +125,15 @@ export function DayView({
         />
       </div>
 
-      <div className="absolute inset-x-0 top-0 z-20 bg-white/70 backdrop-blur-xl dark:bg-black/60">
-        <div style={navStyle}>
+      <div className="absolute inset-x-0 top-0 z-20">
+        <div className="bg-white/70 backdrop-blur-xl dark:bg-black/60" style={navStyle}>
           <TopNavBar backLabel={MONTH_NAMES[selectedDate.getMonth()].slice(0, 3)} onBack={onBack} />
         </div>
-        <div style={chromeStyle}>
+        {/* Backdrop lives here (not on the absolute wrapper) so it fades out
+            with this chrome during a transition instead of staying opaque
+            and covering the other view's header underneath for the whole
+            transition. */}
+        <div className="bg-white/70 backdrop-blur-xl dark:bg-black/60" style={chromeStyle}>
           <MiniWeekStrip
             selectedDate={selectedDate}
             today={today}
