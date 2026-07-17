@@ -51,15 +51,15 @@ export function MonthDayCell({
         </span>
       </div>
 
-      <div className="mt-1 flex flex-col gap-[3px] px-[3px]">
+      <div className="mt-1 flex flex-col gap-[3px] px-[4px]">
         {bars.map(({ event, color, continuesFromPrev, continuesToNext }) => (
           <div
             key={event.id}
-            className="h-[3.5px]"
+            className="h-[7px]"
             style={{
               backgroundColor: color,
-              marginLeft: continuesFromPrev ? "-3px" : 0,
-              marginRight: continuesToNext ? "-3px" : 0,
+              marginLeft: continuesFromPrev ? "-4px" : 0,
+              marginRight: continuesToNext ? "-4px" : 0,
               borderTopLeftRadius: continuesFromPrev ? 0 : 999,
               borderBottomLeftRadius: continuesFromPrev ? 0 : 999,
               borderTopRightRadius: continuesToNext ? 0 : 999,

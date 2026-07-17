@@ -86,26 +86,27 @@ export function MonthWeekRow({
   return (
     <div
       data-cal-week={dateKey(weekDays[0])}
-      className="flex border-b border-black/[.06] dark:border-white/[.08]"
+      className="relative grid grid-cols-7 border-b border-black/[.06] dark:border-white/[.08]"
       style={rowStyle}
     >
-      <div className="w-5 shrink-0 pt-1.5 text-right text-[11px] text-black/35 dark:text-white/35">
+      {/* Overlaid on the divider line above this row (rather than a
+          dedicated left gutter) so the day grid — and the event bars in
+          it — can run all the way to the screen edge. */}
+      <span className="pointer-events-none absolute left-1 top-0 -translate-y-1/2 text-[11px] text-black/35 dark:text-white/35">
         {weekLabel}
-      </div>
-      <div className="grid grow grid-cols-7">
-        {days.map((day, i) => (
-          <MonthDayCell
-            key={day.date.toISOString()}
-            date={day.date}
-            blank={day.blank}
-            isToday={isSameDay(day.date, today)}
-            bars={renderedPerDay[i].bars}
-            overflowCount={renderedPerDay[i].overflowCount}
-            onSelect={onSelectDate}
-            numberHidden={transitionPhase === "selected"}
-          />
-        ))}
-      </div>
+      </span>
+      {days.map((day, i) => (
+        <MonthDayCell
+          key={day.date.toISOString()}
+          date={day.date}
+          blank={day.blank}
+          isToday={isSameDay(day.date, today)}
+          bars={renderedPerDay[i].bars}
+          overflowCount={renderedPerDay[i].overflowCount}
+          onSelect={onSelectDate}
+          numberHidden={transitionPhase === "selected"}
+        />
+      ))}
     </div>
   );
 }

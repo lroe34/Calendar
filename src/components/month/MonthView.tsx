@@ -184,16 +184,13 @@ export function MonthView({
             : undefined;
           return (
             <div key={`${section.year}-${section.month}`} ref={(el) => { sectionRefs.current[i] = el; }}>
-              <div className="flex px-4 pb-1 pt-4" style={headerStyle}>
-                <div className="w-5 shrink-0" />
-                <div className="grid grow grid-cols-7">
-                  <h2
-                    className="whitespace-nowrap text-[26px] font-bold leading-tight"
-                    style={{ gridColumnStart: labelColumn + 1 }}
-                  >
-                    {MONTH_NAMES[section.month]}
-                  </h2>
-                </div>
+              <div className="grid grid-cols-7 pb-1 pt-4" style={headerStyle}>
+                <h2
+                  className="whitespace-nowrap pl-1 text-[26px] font-bold leading-tight"
+                  style={{ gridColumnStart: labelColumn + 1 }}
+                >
+                  {MONTH_NAMES[section.month]}
+                </h2>
               </div>
               {section.weeks.map((week) => {
                 const weekKey = dateKey(week.days[0].date);
