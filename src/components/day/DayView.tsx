@@ -33,6 +33,7 @@ interface DayViewProps {
   onSelectDate: (date: Date) => void;
   onBack: () => void;
   onSelectEvent: (event: CalendarEvent) => void;
+  onGridView?: () => void;
   transition?: DayViewTransition | null;
 }
 
@@ -45,6 +46,7 @@ export function DayView({
   onSelectDate,
   onBack,
   onSelectEvent,
+  onGridView,
   transition = null,
 }: DayViewProps) {
   const calendarsById = useMemo(() => new Map(calendars.map((c) => [c.id, c])), [calendars]);
@@ -192,7 +194,7 @@ export function DayView({
       </div>
 
       <div className="absolute inset-x-0 bottom-0 z-20" style={navStyle}>
-        <BottomBar onToday={() => onSelectDate(today)} />
+        <BottomBar onToday={() => onSelectDate(today)} onGridView={onGridView} />
       </div>
     </div>
   );

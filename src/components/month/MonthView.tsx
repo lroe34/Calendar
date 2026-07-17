@@ -21,6 +21,7 @@ interface MonthViewProps {
   events: CalendarEvent[];
   calendars: CalendarSource[];
   onSelectDate: (date: Date) => void;
+  onGridView?: () => void;
   transition?: MonthViewTransition | null;
 }
 
@@ -36,6 +37,7 @@ export function MonthView({
   events,
   calendars,
   onSelectDate,
+  onGridView,
   transition = null,
 }: MonthViewProps) {
   const calendarsById = useMemo(() => new Map(calendars.map((c) => [c.id, c])), [calendars]);
@@ -218,7 +220,7 @@ export function MonthView({
       </div>
 
       <div className="absolute inset-x-0 bottom-0 z-20" style={navStyle}>
-        <BottomBar onToday={handleToday} />
+        <BottomBar onToday={handleToday} onGridView={onGridView} />
       </div>
     </div>
   );

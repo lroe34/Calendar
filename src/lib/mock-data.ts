@@ -1,12 +1,53 @@
 import type { CalendarEvent, CalendarSource, Reminder } from "./types";
 
 export const calendars: CalendarSource[] = [
-  { id: "cal-green", name: "Rockbot", color: "green" },
-  { id: "cal-blue", name: "Personal", color: "blue" },
-  { id: "cal-gray", name: "Shared", color: "gray" },
-  { id: "cal-tan", name: "Holidays", color: "tan" },
-  { id: "cal-purple", name: "Family", color: "purple" },
-  { id: "cal-slate", name: "Work", color: "slate" },
+  {
+    id: "cal-tan",
+    name: "Holidays in United States",
+    color: "tan",
+    accountName: "Gmail",
+    subtitle: "Shared by Holidays in United States",
+    visible: false,
+  },
+  {
+    id: "cal-blue",
+    name: "lroe34@gmail.com",
+    color: "blue",
+    accountName: "Gmail",
+    visible: true,
+  },
+  {
+    id: "cal-purple",
+    name: "Family",
+    color: "purple",
+    accountName: "iCloud",
+    subtitle: "Shared by Kelly Roe",
+    visible: true,
+  },
+  {
+    id: "cal-green",
+    name: "Rockbot",
+    color: "green",
+    accountName: "iCloud",
+    subtitle: "Public Calendar",
+    visible: true,
+  },
+  {
+    id: "cal-gray",
+    name: "Shared",
+    color: "gray",
+    accountName: "iCloud",
+    subtitle: "Shared by Kelly Roe",
+    visible: true,
+  },
+  {
+    id: "cal-slate",
+    name: "Work",
+    color: "slate",
+    accountName: "iCloud",
+    subtitle: "Public Calendar",
+    visible: true,
+  },
 ];
 
 const CAL_IDS = calendars.map((c) => c.id);

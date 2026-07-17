@@ -10,6 +10,16 @@ export interface CalendarSource {
   id: string;
   name: string;
   color: CalendarColorName;
+  /** Account/source grouping shown as a section header in the calendar list (e.g. "Gmail", "iCloud"). */
+  accountName: string;
+  /** Secondary line under the name, e.g. "Shared by Kelly Roe" or "Public Calendar". */
+  subtitle?: string;
+  /** Whether this calendar's events currently show throughout the app. */
+  visible: boolean;
+  /** Allow events on this calendar to display alerts. Defaults to true when unset. */
+  eventAlerts?: boolean;
+  /** Events on this calendar affect availability for scheduling. Defaults to true when unset. */
+  eventsAffectAvailability?: boolean;
 }
 
 export interface RecurrenceRule {
