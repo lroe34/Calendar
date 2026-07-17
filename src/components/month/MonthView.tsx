@@ -5,7 +5,7 @@ import type { CalendarEvent, CalendarSource } from "@/lib/types";
 import { dateKey, generateCalendarMonths, MONTH_NAMES } from "@/lib/date-utils";
 import { TopNavBar } from "@/components/shared/TopNavBar";
 import { BottomBar } from "@/components/shared/BottomBar";
-import { TRANSITION_MS, TRANSITION_EASE } from "@/lib/transition-constants";
+import { TRANSITION_MS, TRANSITION_MS_AFTER_EXIT, TRANSITION_EASE } from "@/lib/transition-constants";
 import { MonthWeekdayHeader } from "./MonthWeekdayHeader";
 import { MonthWeekRow, type WeekTransitionPhase } from "./MonthWeekRow";
 
@@ -131,16 +131,20 @@ export function MonthView({
   return (
     <div className={`fixed inset-0 overflow-hidden ${transition ? "pointer-events-none" : ""}`}>
       <div ref={scrollRef} className="no-scrollbar absolute inset-0 overflow-y-auto pb-28">
-        <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-xl dark:bg-black/80">
-          <div style={navStyle}>
+        <div className="sticky top-0 z-20">
+          <div className="bg-white/90 backdrop-blur-xl dark:bg-black/80" style={navStyle}>
             <TopNavBar backLabel={`${visibleSection.year}`} onBack={() => {}} />
           </div>
-          <div className="px-4 pb-1 pt-1" style={chromeStyle}>
-            <h1 className="text-[34px] font-bold leading-tight">
-              {MONTH_NAMES[visibleSection.month]}
-            </h1>
-          </div>
-          <div style={chromeStyle}>
+          {/* Backdrop lives here (not on the sticky wrapper) so it fades out
+              with this chrome during a transition instead of staying opaque
+              and covering the other view's header underneath for the whole
+              transition. */}
+          <div className="bg-white/90 backdrop-blur-xl dark:bg-black/80" style={chromeStyle}>
+            <div className="px-4 pb-1 pt-1">
+              <h1 className="text-[34px] font-bold leading-tight">
+                {MONTH_NAMES[visibleSection.month]}
+              </h1>
+            </div>
             <MonthWeekdayHeader highlightColumn={todayColumn} />
           </div>
         </div>
@@ -163,6 +167,10 @@ export function MonthView({
               ? transition.armed
               : !transition.armed
             : false;
+          // Mirrors MonthWeekRow's duration bump so an "after" section's
+          // header doesn't detach from its (slower-exiting) week rows.
+          const headerDurationMs =
+            transition?.mode === "exit" && headerPhase === "after" ? TRANSITION_MS_AFTER_EXIT : TRANSITION_MS;
           const headerStyle = transition
             ? {
                 transform: headerIsOff
@@ -171,21 +179,18 @@ export function MonthView({
                     : "translateY(-100vh)"
                   : "translateY(0)",
                 opacity: headerIsOff && headerPhase !== "after" ? 0 : 1,
-                transition: `transform ${TRANSITION_MS}ms ${TRANSITION_EASE}, opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
+                transition: `transform ${headerDurationMs}ms ${TRANSITION_EASE}, opacity ${headerDurationMs}ms ${TRANSITION_EASE}`,
               }
             : undefined;
           return (
             <div key={`${section.year}-${section.month}`} ref={(el) => { sectionRefs.current[i] = el; }}>
-              <div className="flex px-4 pb-1 pt-4" style={headerStyle}>
-                <div className="w-5 shrink-0" />
-                <div className="grid grow grid-cols-7">
-                  <h2
-                    className="whitespace-nowrap text-[26px] font-bold leading-tight"
-                    style={{ gridColumnStart: labelColumn + 1 }}
-                  >
-                    {MONTH_NAMES[section.month]}
-                  </h2>
-                </div>
+              <div className="grid grid-cols-7 pb-1 pt-4" style={headerStyle}>
+                <h2
+                  className="whitespace-nowrap pl-1 text-[26px] font-bold leading-tight"
+                  style={{ gridColumnStart: labelColumn + 1 }}
+                >
+                  {MONTH_NAMES[section.month]}
+                </h2>
               </div>
               {section.weeks.map((week) => {
                 const weekKey = dateKey(week.days[0].date);

@@ -48,15 +48,21 @@ export function computeWeekSlots(
         Math.round((end.getTime() - weekStart.getTime()) / 86_400_000),
       );
 
-      return { event, dayStartIndex, dayEndIndex };
+      return { event, dayStartIndex, dayEndIndex, startMs: new Date(event.start).getTime() };
     })
-    .filter((v): v is { event: CalendarEvent; dayStartIndex: number; dayEndIndex: number } => v !== null);
+    .filter(
+      (v): v is { event: CalendarEvent; dayStartIndex: number; dayEndIndex: number; startMs: number } =>
+        v !== null,
+    );
 
   candidates.sort((a, b) => {
     const spanA = a.dayEndIndex - a.dayStartIndex;
     const spanB = b.dayEndIndex - b.dayStartIndex;
     if (spanB !== spanA) return spanB - spanA;
-    return a.dayStartIndex - b.dayStartIndex;
+    if (a.dayStartIndex !== b.dayStartIndex) return a.dayStartIndex - b.dayStartIndex;
+    // Same-day events tie on span/start-day — break by actual time of day so
+    // the bar stacking order matches the chronological order Day view shows.
+    return a.startMs - b.startMs;
   });
 
   const slotEnd: number[] = [];

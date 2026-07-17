@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CalendarEvent, CalendarSource, Reminder } from "@/lib/types";
 import { MONTH_NAMES, isSameDay } from "@/lib/date-utils";
 import { HOUR_HEIGHT_PX } from "@/lib/day-grid";
@@ -77,11 +77,47 @@ export function DayView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate.getTime()]);
 
+  // The header (nav + mini strip + day heading + all-day lane) is pinned in
+  // place, not part of the scroll flow, so the hour grid below needs its own
+  // top offset kept in sync with the header's real (variable — the all-day
+  // lane can wrap to multiple lines) height.
+  const headerRef = useRef<HTMLDivElement>(null);
+  const [headerHeight, setHeaderHeight] = useState(0);
+
+  useLayoutEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    setHeaderHeight(el.getBoundingClientRect().height);
+  }, [selectedDate.getTime(), allDayEvents.length, dayReminders.length]);
+
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => setHeaderHeight(entry.contentRect.height));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   const chromeIsOff = transition ? (transition.mode === "exit" ? transition.armed : !transition.armed) : false;
   const chromeStyle = transition
     ? {
         opacity: chromeIsOff ? 0 : 1,
         transition: `opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
+      }
+    : undefined;
+
+  // The scrollable day content slides along with its fade — up into place
+  // while this view is entering, down and away while it's exiting — for a
+  // more deliberate month<->day transition. The mini week strip above stays
+  // on chromeStyle (opacity-only, no transform): FlyingDayNumbers measures
+  // its resting position mid-transition, which a moving transform would
+  // throw off.
+  const SLIDE_DISTANCE_PX = 32;
+  const contentStyle = transition
+    ? {
+        opacity: chromeIsOff ? 0 : 1,
+        transform: chromeIsOff ? `translateY(${SLIDE_DISTANCE_PX}px)` : "translateY(0)",
+        transition: `opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}, transform ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
       }
     : undefined;
 
@@ -97,11 +133,9 @@ export function DayView({
     <div className={`fixed inset-0 overflow-hidden ${transition ? "pointer-events-none" : ""}`}>
       <div
         ref={scrollRef}
-        className="no-scrollbar absolute inset-0 overflow-y-auto pb-28 pt-32"
-        style={chromeStyle}
+        className="no-scrollbar absolute inset-0 overflow-y-auto pb-28"
+        style={{ ...contentStyle, paddingTop: headerHeight }}
       >
-        <DayHeading date={selectedDate} />
-        <AllDayLane events={allDayEvents} reminders={dayReminders} calendarsById={calendarsById} />
         <HourGrid
           events={timedEvents}
           calendarsById={calendarsById}
@@ -110,17 +144,23 @@ export function DayView({
         />
       </div>
 
-      <div className="absolute inset-x-0 top-0 z-20 bg-white/70 backdrop-blur-xl dark:bg-black/60">
-        <div style={navStyle}>
+      <div ref={headerRef} className="absolute inset-x-0 top-0 z-20">
+        <div className="bg-white/70 backdrop-blur-xl dark:bg-black/60" style={navStyle}>
           <TopNavBar backLabel={MONTH_NAMES[selectedDate.getMonth()].slice(0, 3)} onBack={onBack} />
         </div>
-        <div style={chromeStyle}>
+        {/* Backdrop lives here (not on the absolute wrapper) so it fades out
+            with this chrome during a transition instead of staying opaque
+            and covering the other view's header underneath for the whole
+            transition. */}
+        <div className="bg-white/70 backdrop-blur-xl dark:bg-black/60" style={chromeStyle}>
           <MiniWeekStrip
             selectedDate={selectedDate}
             today={today}
             onSelectDate={onSelectDate}
             hiddenDayKeys={transition?.hiddenDayKeys}
           />
+          <DayHeading date={selectedDate} />
+          <AllDayLane events={allDayEvents} reminders={dayReminders} calendarsById={calendarsById} />
         </div>
       </div>
 

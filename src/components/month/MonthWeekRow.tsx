@@ -7,7 +7,7 @@ import { computeWeekSlots, getDayCellBars } from "@/lib/month-layout";
 import { CALENDAR_COLORS } from "@/lib/colors";
 import { dateKey, isSameDay } from "@/lib/date-utils";
 import { MonthDayCell, type RenderedBar } from "./MonthDayCell";
-import { TRANSITION_MS, TRANSITION_EASE } from "@/lib/transition-constants";
+import { TRANSITION_MS, TRANSITION_MS_AFTER_EXIT, TRANSITION_EASE } from "@/lib/transition-constants";
 
 export type WeekTransitionPhase = "before" | "selected" | "after";
 
@@ -70,37 +70,45 @@ export function MonthWeekRow({
   const offOpacity = transitionPhase === "after" ? 1 : 0;
 
   const isOff = transitionMode === "exit" ? transitionArmed : !transitionArmed;
+  // "After" rows only have to clear the viewport, not travel the full
+  // 100vh, so the default duration reads as an near-instant flick when
+  // they're leaving. Give that specific leg more time.
+  const durationMs =
+    transitionMode === "exit" && transitionPhase === "after" ? TRANSITION_MS_AFTER_EXIT : TRANSITION_MS;
   const rowStyle: CSSProperties | undefined = transitionPhase
     ? {
         transform: isOff ? offTransform : "translateY(0)",
         opacity: isOff ? offOpacity : 1,
-        transition: `transform ${TRANSITION_MS}ms ${TRANSITION_EASE}, opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
+        transition: `transform ${durationMs}ms ${TRANSITION_EASE}, opacity ${durationMs}ms ${TRANSITION_EASE}`,
       }
     : undefined;
 
   return (
     <div
       data-cal-week={dateKey(weekDays[0])}
-      className="flex border-b border-black/[.06] dark:border-white/[.08]"
+      className="relative grid grid-cols-7 border-b border-black/[.06] pb-4 dark:border-white/[.08]"
       style={rowStyle}
     >
-      <div className="w-5 shrink-0 pt-1.5 text-right text-[11px] text-black/35 dark:text-white/35">
+      {/* Overlaid on the divider line above this row (rather than a
+          dedicated left gutter) so the day grid — and the event bars in
+          it — can run all the way to the screen edge. The row's own pb-4
+          keeps its last bar clear of the line so this doesn't get
+          overlapped by Sunday's bottommost bar in a tall week. */}
+      <span className="pointer-events-none absolute left-1 top-0 -translate-y-1/2 text-[11px] text-black/35 dark:text-white/35">
         {weekLabel}
-      </div>
-      <div className="grid grow grid-cols-7">
-        {days.map((day, i) => (
-          <MonthDayCell
-            key={day.date.toISOString()}
-            date={day.date}
-            blank={day.blank}
-            isToday={isSameDay(day.date, today)}
-            bars={renderedPerDay[i].bars}
-            overflowCount={renderedPerDay[i].overflowCount}
-            onSelect={onSelectDate}
-            numberHidden={transitionPhase === "selected"}
-          />
-        ))}
-      </div>
+      </span>
+      {days.map((day, i) => (
+        <MonthDayCell
+          key={day.date.toISOString()}
+          date={day.date}
+          blank={day.blank}
+          isToday={isSameDay(day.date, today)}
+          bars={renderedPerDay[i].bars}
+          overflowCount={renderedPerDay[i].overflowCount}
+          onSelect={onSelectDate}
+          numberHidden={transitionPhase === "selected"}
+        />
+      ))}
     </div>
   );
 }

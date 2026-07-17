@@ -2,6 +2,7 @@ import type { CalendarEvent, CalendarColorName } from "@/lib/types";
 import { HOUR_HEIGHT_PX } from "@/lib/day-grid";
 import { formatHour, minutesSinceMidnight } from "@/lib/date-utils";
 import { EventBlock } from "@/components/day/EventBlock";
+import { SOLO_LAYOUT } from "@/lib/event-layout";
 
 interface MiniDayPreviewProps {
   event: CalendarEvent;
@@ -45,7 +46,13 @@ export function MiniDayPreview({ event, colorName }: MiniDayPreviewProps) {
             height: 24 * HOUR_HEIGHT_PX,
           }}
         >
-          <EventBlock event={event} colorName={colorName} columnIndex={0} columnCount={1} variant="solid" />
+          <EventBlock
+            event={event}
+            colorName={colorName}
+            leftPct={SOLO_LAYOUT.leftPct}
+            widthPct={SOLO_LAYOUT.widthPct}
+            variant="solid"
+          />
         </div>
       </div>
     </div>
