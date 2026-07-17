@@ -70,7 +70,7 @@ export function EventBlock({
         style={{ color: isSolid ? "#fff" : color.text }}
       >
         <div className="flex items-start justify-between gap-1">
-          <span className="truncate text-[12.5px] font-semibold leading-tight">{event.title}</span>
+          <span className="truncate text-[12.5px] ml-0.5 font-semibold leading-tight">{event.title}</span>
           {event.recurrence && <RepeatIcon className="mt-0.5 h-3 w-3 shrink-0 opacity-70" />}
         </div>
         {showDetails && (

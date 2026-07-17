@@ -43,8 +43,8 @@ export function MonthDayCell({
           style={numberHidden ? { opacity: 0 } : undefined}
           className={
             isToday
-              ? "flex h-7 w-7 items-center justify-center rounded-full bg-red-500 text-[17px] font-semibold text-white"
-              : "flex h-7 w-7 items-center justify-center text-[17px] text-black dark:text-white"
+              ? "flex h-9 w-9 items-center justify-center rounded-full bg-red-500 text-[17px] font-semibold text-white"
+              : "flex h-9 w-9 items-center justify-center text-[17px] text-black dark:text-white"
           }
         >
           {date.getDate()}

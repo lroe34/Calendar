@@ -130,14 +130,14 @@ export function MonthView({
 
   return (
     <div className={`fixed inset-0 overflow-hidden ${transition ? "pointer-events-none" : ""}`}>
-      <div ref={scrollRef} className="no-scrollbar absolute inset-0 overflow-y-auto pb-28">
+      <div ref={scrollRef} className="no-scrollbar absolute inset-0 overflow-y-auto pb-28 ">
         <div className="sticky top-0 z-20">
           {/* Single frosted pane spanning the nav band height + header content
               so there is one continuous backdrop-blur region — no seam. The
               invisible twin lives inside it so its height is part of the same
               blur surface, while the real toolbar is an absolute z-40 sibling
               (transparent) that can stack above sliding "after" rows. */}
-          <div className="bg-white/60 backdrop-blur-sm dark:bg-black/60" style={chromeStyle}>
+          <div className="bg-white/60 backdrop-blur-sm dark:bg-black/60 border-b border-black/[.06] dark:border-white/[.08]" style={chromeStyle}>
             <div className="invisible" aria-hidden>
               <TopNavBar backLabel={`${visibleSection.year}`} onBack={() => {}} />
             </div>
@@ -149,8 +149,8 @@ export function MonthView({
             <MonthWeekdayHeader highlightColumn={todayColumn} />
           </div>
         </div>
-
-        {sections.map((section, i) => {
+        <div className="">
+          {sections.map((section, i) => {
           const firstOfMonthColumn = new Date(section.year, section.month, 1).getDay();
           // Clamp so the label never starts so close to the right edge that
           // a long month name (e.g. "September") would run off-screen.
@@ -223,6 +223,8 @@ export function MonthView({
             </div>
           );
         })}
+          </div>
+        
       </div>
 
       {/* Toolbars are siblings of the scroll layer (not inside it) so their

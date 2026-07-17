@@ -20,6 +20,7 @@ export function MiniWeekStrip({ selectedDate, today, onSelectDate, hiddenDayKeys
       {days.map((date, i) => {
         const isToday = isSameDay(date, today);
         const isSelected = isSameDay(date, selectedDate);
+        const isWeekend = i === 0 || i === 6;
         const key = dateKey(date);
         const hidden = hiddenDayKeys?.has(key) ?? false;
         return (
@@ -28,13 +29,19 @@ export function MiniWeekStrip({ selectedDate, today, onSelectDate, hiddenDayKeys
             onClick={() => onSelectDate(date)}
             className="flex flex-col items-center gap-1 py-1"
           >
-            <span className="text-[12px] font-medium text-black/45 dark:text-white/45">
+            <span
+              className={
+                isWeekend
+                  ? "text-[12px] font-medium text-black/45 dark:text-white/45"
+                  : "text-[12px] font-medium text-black dark:text-white"
+              }
+            >
               {WEEKDAY_LETTERS[i]}
             </span>
             <span
               data-cal-daynum={key}
               style={hidden ? { opacity: 0 } : undefined}
-              className="relative flex h-7 w-7 items-center justify-center"
+              className="relative flex h-9 w-9 items-center justify-center"
             >
               {/* Always mounted (never conditionally rendered) so toggling
                   `isSelected` transitions opacity/scale instead of just
