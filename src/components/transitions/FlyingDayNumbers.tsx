@@ -14,7 +14,7 @@ interface FlyingDayNumbersProps {
   /** The 7 days (Sun..Sat) of the week being carried across views. */
   days: Date[];
   today: Date;
-  /** The specific date the user tapped/back-navigated to; only it gets the "selected" pill. */
+  /** Day-view selected date (tapped in month, or current selection when going back). */
   activeDate: Date;
   /** Always known synchronously (measured at the moment the transition starts). */
   fromRects: (FlyingRect | null)[];
@@ -22,7 +22,12 @@ interface FlyingDayNumbersProps {
   toRects: (FlyingRect | null)[] | null;
   /** false = render at `fromRects` (pre-animation); true = render at `toRects` (post-animation). */
   armed: boolean;
-  /** Whether the destination context is the day view (shows a selected pill) vs month (no pill). */
+  /**
+   * Destination context. Day view's "selected" pill is `activeDate`; month
+   * view's standing highlight is always today. The pill morphs between those
+   * two (same grow/shrink as MiniWeekStrip date changes) rather than only
+   * appearing/disappearing on `activeDate`.
+   */
   pillAppears: boolean;
 }
 
@@ -35,6 +40,12 @@ export function FlyingDayNumbers({
   armed,
   pillAppears,
 }: FlyingDayNumbersProps) {
+  // toDay: month's today-highlight → day's selected pill.
+  // toMonth: day's selected pill → month's today-highlight.
+  // When those are the same date the pill simply stays put.
+  const pillFromDate = pillAppears ? today : activeDate;
+  const pillToDate = pillAppears ? activeDate : today;
+
   return (
     <div className="pointer-events-none fixed inset-0 z-30">
       {days.map((date, i) => {
@@ -48,8 +59,7 @@ export function FlyingDayNumbers({
         const target = to ?? from;
         const shown = armed ? target : from;
         const isToday = isSameDay(date, today);
-        const isActive = isSameDay(date, activeDate);
-        const pillVisible = isActive && armed === pillAppears;
+        const pillVisible = isSameDay(date, armed ? pillToDate : pillFromDate);
 
         return (
           <div
