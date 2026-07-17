@@ -131,9 +131,12 @@ export function DayView({
 
   return (
     <div className={`fixed inset-0 overflow-hidden ${transition ? "pointer-events-none" : ""}`}>
+      {/* The hour grid opts back into pointer events even mid-transition —
+          scrolling (and the momentum it carries into the settled view)
+          shouldn't have to wait for the flying-numbers animation to finish. */}
       <div
         ref={scrollRef}
-        className="no-scrollbar absolute inset-0 overflow-y-auto pb-28"
+        className="no-scrollbar pointer-events-auto absolute inset-0 overflow-y-auto pb-28"
         style={{ ...contentStyle, paddingTop: headerHeight }}
       >
         <HourGrid

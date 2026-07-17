@@ -180,10 +180,17 @@ export function CalendarApp() {
   const monthZ = !transition ? undefined : transition.mode === "toDay" ? 2 : 1;
   const dayZ = !transition ? undefined : transition.mode === "toDay" ? 1 : 2;
 
+  // These wrappers are otherwise plain, unstyled boxes, but each one is
+  // fixed and covers the full screen — a stray default `pointer-events: auto`
+  // would let the (invisible) wrapper itself catch every tap/scroll and
+  // block whatever's stacked underneath, regardless of the pointer-events
+  // the mounted view sets on its own root. Opting both out during a
+  // transition leaves that decision entirely to the views, which already
+  // opt individual pieces (like the day view's scroll container) back in.
   return (
     <>
       {renderMonth && (
-        <div style={{ position: "fixed", inset: 0, zIndex: monthZ }}>
+        <div style={{ position: "fixed", inset: 0, zIndex: monthZ, pointerEvents: transition ? "none" : undefined }}>
           <MonthView
             today={today}
             anchorDate={selectedDate}
@@ -204,7 +211,7 @@ export function CalendarApp() {
       )}
 
       {renderDay && (
-        <div style={{ position: "fixed", inset: 0, zIndex: dayZ }}>
+        <div style={{ position: "fixed", inset: 0, zIndex: dayZ, pointerEvents: transition ? "none" : undefined }}>
           <DayView
             today={today}
             selectedDate={selectedDate}

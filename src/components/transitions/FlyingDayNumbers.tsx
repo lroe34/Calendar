@@ -49,7 +49,7 @@ export function FlyingDayNumbers({
         const shown = armed ? target : from;
         const isToday = isSameDay(date, today);
         const isActive = isSameDay(date, activeDate);
-        const pillVisible = isActive && !isToday && armed === pillAppears;
+        const pillVisible = isActive && armed === pillAppears;
 
         return (
           <div
@@ -63,19 +63,21 @@ export function FlyingDayNumbers({
               transition: `left ${TRANSITION_MS}ms ${TRANSITION_EASE}, top ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
             }}
           >
-            {isToday && <div className="absolute inset-0 rounded-full bg-red-500" />}
-            {!isToday && (
-              <div
-                className="absolute inset-0 rounded-full bg-black/10 dark:bg-white/15"
-                style={{
-                  opacity: pillVisible ? 1 : 0,
-                  transition: `opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
-                }}
-              />
-            )}
+            <div
+              className={`absolute inset-0 rounded-full ${isToday ? "bg-red-500" : "bg-black dark:bg-white"}`}
+              style={{
+                opacity: pillVisible ? 1 : 0,
+                transform: pillVisible ? "scale(1)" : "scale(0.8)",
+                transition: `opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}, transform ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
+              }}
+            />
             <span
-              className={`relative flex h-full w-full items-center justify-center text-[16px] font-semibold ${
-                isToday ? "text-white" : "text-black dark:text-white"
+              className={`relative flex h-full w-full items-center justify-center text-[16px] ${
+                pillVisible
+                  ? `font-bold ${isToday ? "text-white" : "text-white dark:text-black"}`
+                  : isToday
+                    ? "text-red-500"
+                    : "text-black dark:text-white"
               }`}
             >
               {date.getDate()}
