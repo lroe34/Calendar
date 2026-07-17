@@ -10,11 +10,14 @@ export function MonthWeekdayHeader({ highlightColumn }: MonthWeekdayHeaderProps)
       {WEEKDAY_LETTERS.map((letter, i) => (
         <div key={i} className="flex justify-center">
           <span
-            className={
-              highlightColumn === i
-                ? "rounded-full bg-red-500/15 px-2 py-0.5 text-[13px] font-medium text-red-500"
-                : "px-2 py-0.5 text-[13px] font-medium text-black/45 dark:text-white/45"
-            }
+            // className={
+            //   highlightColumn === i
+            //     ? "rounded-full bg-red-500/15 px-2 py-0.5 text-[13px] font-medium text-red-500"
+            //     : "px-2 py-0.5 text-[13px] font-medium text-black/45 dark:text-white/45"
+            // }
+            className="px-2 py-0.5 text-[13px] font-medium text-black/45 dark:text-white/45"
+            
+
           >
             {letter}
           </span>

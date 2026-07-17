@@ -62,12 +62,14 @@ export function MonthWeekRow({
     }),
   );
 
-  // Off-screen resting state for each phase. "before" and "selected" rows
-  // both slide up and fade (numbers are represented by flying clones while
-  // selected); "after" rows just slide off the bottom, opaque the whole way.
+  // Off-screen resting state for each phase. "before"/"after" rows slide up
+  // or down and fade out while exiting, but stay fully opaque while
+  // entering so they don't visibly fade in as they slide into place.
+  // "Selected" rows always fade (numbers are represented by flying clones
+  // while selected).
   const offTransform =
     transitionPhase === "after" ? "translateY(100vh)" : "translateY(-100vh)";
-  const offOpacity = transitionPhase === "after" ? 1 : 0;
+  const offOpacity = transitionPhase === "selected" ? 0 : transitionMode === "exit" ? 0 : 1;
 
   const isOff = transitionMode === "exit" ? transitionArmed : !transitionArmed;
   // "After" rows only have to clear the viewport, not travel the full

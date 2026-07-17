@@ -181,12 +181,15 @@ export function MonthView({
                     ? "translateY(100vh)"
                     : "translateY(-100vh)"
                   : "translateY(0)",
-                opacity: headerIsOff && headerPhase !== "after" ? 0 : 1,
+                // Fade out while exiting, but stay fully opaque while
+                // entering so headers don't visibly fade in as they slide.
+                opacity: headerIsOff && transition.mode === "exit" ? 0 : 1,
                 // Match MonthWeekRow: "after" headers ride above the day
                 // layer / earlier weeks while they travel.
                 zIndex: headerPhase === "after" ? 30 : undefined,
                 position: headerPhase === "after" ? ("relative" as const) : undefined,
                 transition: `transform ${headerDurationMs}ms ${TRANSITION_EASE}, opacity ${headerDurationMs}ms ${TRANSITION_EASE}`,
+
               }
             : undefined;
           return (
