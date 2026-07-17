@@ -15,7 +15,7 @@ export function AllDayLane({ events, reminders, calendarsById }: AllDayLaneProps
   if (events.length === 0 && reminders.length === 0) return null;
 
   return (
-    <div className="flex items-start gap-2 border-t border-black/[.06] px-4 py-2 dark:border-white/[.08]">
+    <div className="flex items-start gap-2 border-b border-black/[.06] px-4 py-2 dark:border-white/[.08]">
       <span className="shrink-0 pt-1.5 text-[12px] text-black/40 dark:text-white/40">all-day</span>
       {/* 2-col grid: odd last item spans full width. Max 2.5 rows, then scroll. */}
       <div className="no-scrollbar grid max-h-[calc(2.5*1.75rem+2*0.5rem)] flex-1 grid-cols-2 gap-2 overflow-y-auto">
