@@ -86,16 +86,15 @@ export function MonthWeekRow({
   return (
     <div
       data-cal-week={dateKey(weekDays[0])}
-      className="relative grid grid-cols-7 border-b border-black/[.06] dark:border-white/[.08]"
+      className="relative grid grid-cols-7 border-b border-black/[.06] pb-4 dark:border-white/[.08]"
       style={rowStyle}
     >
       {/* Overlaid on the divider line above this row (rather than a
           dedicated left gutter) so the day grid — and the event bars in
-          it — can run all the way to the screen edge. Sits just below the
-          line rather than centered on it — Sunday's stacked bars in the row
-          above can reach close to the line, and centering the label there
-          let its top half get overlapped by them. */}
-      <span className="pointer-events-none absolute left-1 top-1 text-[11px] text-black/35 dark:text-white/35">
+          it — can run all the way to the screen edge. The row's own pb-4
+          keeps its last bar clear of the line so this doesn't get
+          overlapped by Sunday's bottommost bar in a tall week. */}
+      <span className="pointer-events-none absolute left-1 top-0 -translate-y-1/2 text-[11px] text-black/35 dark:text-white/35">
         {weekLabel}
       </span>
       {days.map((day, i) => (
