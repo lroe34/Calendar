@@ -1,7 +1,7 @@
 import type { CalendarEvent, CalendarSource } from "@/lib/types";
 import { HOUR_HEIGHT_PX } from "@/lib/day-grid";
 import { formatHour } from "@/lib/date-utils";
-import { layoutOverlappingEvents } from "@/lib/event-layout";
+import { layoutOverlappingEvents, SOLO_LAYOUT } from "@/lib/event-layout";
 import { EventBlock } from "./EventBlock";
 import { CurrentTimeLine } from "./CurrentTimeLine";
 
@@ -46,8 +46,9 @@ export function HourGrid({ events, calendarsById, isToday, onSelectEvent }: Hour
               key={event.id}
               event={event}
               colorName={calendar?.color ?? "gray"}
-              columnIndex={l?.columnIndex ?? 0}
-              columnCount={l?.columnCount ?? 1}
+              leftPct={l?.leftPct ?? SOLO_LAYOUT.leftPct}
+              widthPct={l?.widthPct ?? SOLO_LAYOUT.widthPct}
+              nested={l?.nested ?? false}
               onClick={() => onSelectEvent?.(event)}
             />
           );

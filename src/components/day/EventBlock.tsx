@@ -11,8 +11,11 @@ import { ClockIcon, PinIcon, RepeatIcon } from "@/components/shared/Icons";
 interface EventBlockProps {
   event: CalendarEvent;
   colorName: keyof typeof CALENDAR_COLORS;
-  columnIndex: number;
-  columnCount: number;
+  leftPct: number;
+  widthPct: number;
+  /** True when this event is inset over a container event it's fully
+   * contained within, rather than sharing a plain side-by-side column. */
+  nested?: boolean;
   /** "tint" (default) is the normal Day-view look; "solid" is the inverted
    * saturated-fill/white-text style used by the detail sheet's mini preview. */
   variant?: "tint" | "solid";
@@ -22,8 +25,9 @@ interface EventBlockProps {
 export function EventBlock({
   event,
   colorName,
-  columnIndex,
-  columnCount,
+  leftPct,
+  widthPct,
+  nested = false,
   variant = "tint",
   onClick,
 }: EventBlockProps) {
@@ -36,9 +40,6 @@ export function EventBlock({
   );
   const color = CALENDAR_COLORS[colorName];
   const showDetails = height >= DETAIL_DISCLOSURE_THRESHOLD_PX;
-  const gapPct = 1.5;
-  const widthPct = 100 / columnCount - gapPct;
-  const leftPct = columnIndex * (100 / columnCount) + gapPct / 2;
   const isSolid = variant === "solid";
 
   return (
@@ -51,6 +52,8 @@ export function EventBlock({
         left: `${leftPct}%`,
         width: `${widthPct}%`,
         backgroundColor: isSolid ? color.accent : color.tint,
+        zIndex: nested ? 1 : undefined,
+        boxShadow: nested ? "0 1px 6px rgba(0,0,0,0.18)" : undefined,
       }}
     >
       {!isSolid && (
