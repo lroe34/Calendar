@@ -14,14 +14,14 @@ export interface LayoutResult {
   nested: boolean;
 }
 
-const GAP_PCT = 1.5;
 /** How far a nested event is inset from its container's left edge, as a
  * fraction of the container's own width — leaves a strip of the container
  * (and its left accent line) visible instead of fully covering it. */
 const NESTED_INDENT_FRACTION = 0.12;
 
-/** Single full-width slot, for callers that only ever render one event at a time. */
-export const SOLO_LAYOUT = { leftPct: GAP_PCT / 2, widthPct: 100 - GAP_PCT };
+/** Single full-width slot, for callers that only ever render one event at a time.
+ *  Horizontal edge inset is applied in EventBlock (pixel gap), not here. */
+export const SOLO_LAYOUT = { leftPct: 0, widthPct: 100 };
 
 function fullyContains(a: LayoutInput, b: LayoutInput): boolean {
   return (
@@ -124,8 +124,8 @@ export function layoutOverlappingEvents(events: LayoutInput[]): LayoutResult[] {
   const topLevelColumns = packColumns(topLevel);
   for (const ev of topLevel) {
     const { columnIndex, columnCount } = topLevelColumns.get(ev.id)!;
-    const widthPct = 100 / columnCount - GAP_PCT;
-    const leftPct = columnIndex * (100 / columnCount) + GAP_PCT / 2;
+    const widthPct = 100 / columnCount;
+    const leftPct = columnIndex * widthPct;
     containerRectById.set(ev.id, { leftPct, widthPct });
     results.push({ id: ev.id, leftPct, widthPct, nested: false });
   }
@@ -149,8 +149,8 @@ export function layoutOverlappingEvents(events: LayoutInput[]): LayoutResult[] {
       const slotWidth = insetWidth / columnCount;
       results.push({
         id: child.id,
-        leftPct: insetLeft + columnIndex * slotWidth + GAP_PCT / 2,
-        widthPct: slotWidth - GAP_PCT,
+        leftPct: insetLeft + columnIndex * slotWidth,
+        widthPct: slotWidth,
         nested: true,
       });
     }

@@ -2,6 +2,7 @@ import type { CalendarEvent } from "@/lib/types";
 import { CALENDAR_COLORS } from "@/lib/colors";
 import {
   DETAIL_DISCLOSURE_THRESHOLD_PX,
+  EVENT_EDGE_GAP_PX,
   MIN_EVENT_HEIGHT_PX,
   minutesToPx,
 } from "@/lib/day-grid";
@@ -33,11 +34,13 @@ export function EventBlock({
 }: EventBlockProps) {
   const start = new Date(event.start);
   const end = new Date(event.end);
-  const top = minutesToPx(minutesSinceMidnight(start));
-  const height = Math.max(
-    MIN_EVENT_HEIGHT_PX,
-    minutesToPx(minutesSinceMidnight(end) - minutesSinceMidnight(start)),
-  );
+  const top = minutesToPx(minutesSinceMidnight(start)) + EVENT_EDGE_GAP_PX;
+  const height =
+    Math.max(
+      MIN_EVENT_HEIGHT_PX,
+      minutesToPx(minutesSinceMidnight(end) - minutesSinceMidnight(start)),
+    ) -
+    EVENT_EDGE_GAP_PX * 2;
   const color = CALENDAR_COLORS[colorName];
   const showDetails = height >= DETAIL_DISCLOSURE_THRESHOLD_PX;
   const isSolid = variant === "solid";
@@ -49,8 +52,8 @@ export function EventBlock({
       style={{
         top,
         height,
-        left: `${leftPct}%`,
-        width: `${widthPct}%`,
+        left: `calc(${leftPct}% + ${EVENT_EDGE_GAP_PX / 2}px)`,
+        width: `calc(${widthPct}% - ${EVENT_EDGE_GAP_PX}px)`,
         backgroundColor: isSolid ? color.accent : color.tint,
         zIndex: nested ? 1 : undefined,
         boxShadow: nested ? "0 1px 6px rgba(0,0,0,0.18)" : undefined,

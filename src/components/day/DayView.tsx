@@ -265,7 +265,7 @@ export function DayView({
           shouldn't have to wait for the flying-numbers animation to finish. */}
       <div
         ref={scrollRef}
-        className="no-scrollbar pointer-events-auto absolute inset-0 overflow-y-auto pb-28"
+        className="no-scrollbar pointer-events-auto absolute inset-0 overflow-y-auto pb-28 mt-3"
         style={{ ...contentStyle, paddingTop: headerHeight }}
       >
         <HourGrid
