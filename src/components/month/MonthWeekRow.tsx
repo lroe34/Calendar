@@ -7,7 +7,7 @@ import { computeWeekSlots, getDayCellBars } from "@/lib/month-layout";
 import { CALENDAR_COLORS } from "@/lib/colors";
 import { dateKey, isSameDay } from "@/lib/date-utils";
 import { MonthDayCell, type RenderedBar } from "./MonthDayCell";
-import { TRANSITION_MS, TRANSITION_EASE } from "@/lib/transition-constants";
+import { TRANSITION_MS, TRANSITION_MS_AFTER_EXIT, TRANSITION_EASE } from "@/lib/transition-constants";
 
 export type WeekTransitionPhase = "before" | "selected" | "after";
 
@@ -70,11 +70,16 @@ export function MonthWeekRow({
   const offOpacity = transitionPhase === "after" ? 1 : 0;
 
   const isOff = transitionMode === "exit" ? transitionArmed : !transitionArmed;
+  // "After" rows only have to clear the viewport, not travel the full
+  // 100vh, so the default duration reads as an near-instant flick when
+  // they're leaving. Give that specific leg more time.
+  const durationMs =
+    transitionMode === "exit" && transitionPhase === "after" ? TRANSITION_MS_AFTER_EXIT : TRANSITION_MS;
   const rowStyle: CSSProperties | undefined = transitionPhase
     ? {
         transform: isOff ? offTransform : "translateY(0)",
         opacity: isOff ? offOpacity : 1,
-        transition: `transform ${TRANSITION_MS}ms ${TRANSITION_EASE}, opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
+        transition: `transform ${durationMs}ms ${TRANSITION_EASE}, opacity ${durationMs}ms ${TRANSITION_EASE}`,
       }
     : undefined;
 

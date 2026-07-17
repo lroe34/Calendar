@@ -5,7 +5,7 @@ import type { CalendarEvent, CalendarSource } from "@/lib/types";
 import { dateKey, generateCalendarMonths, MONTH_NAMES } from "@/lib/date-utils";
 import { TopNavBar } from "@/components/shared/TopNavBar";
 import { BottomBar } from "@/components/shared/BottomBar";
-import { TRANSITION_MS, TRANSITION_EASE } from "@/lib/transition-constants";
+import { TRANSITION_MS, TRANSITION_MS_AFTER_EXIT, TRANSITION_EASE } from "@/lib/transition-constants";
 import { MonthWeekdayHeader } from "./MonthWeekdayHeader";
 import { MonthWeekRow, type WeekTransitionPhase } from "./MonthWeekRow";
 
@@ -163,6 +163,10 @@ export function MonthView({
               ? transition.armed
               : !transition.armed
             : false;
+          // Mirrors MonthWeekRow's duration bump so an "after" section's
+          // header doesn't detach from its (slower-exiting) week rows.
+          const headerDurationMs =
+            transition?.mode === "exit" && headerPhase === "after" ? TRANSITION_MS_AFTER_EXIT : TRANSITION_MS;
           const headerStyle = transition
             ? {
                 transform: headerIsOff
@@ -171,7 +175,7 @@ export function MonthView({
                     : "translateY(-100vh)"
                   : "translateY(0)",
                 opacity: headerIsOff && headerPhase !== "after" ? 0 : 1,
-                transition: `transform ${TRANSITION_MS}ms ${TRANSITION_EASE}, opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
+                transition: `transform ${headerDurationMs}ms ${TRANSITION_EASE}, opacity ${headerDurationMs}ms ${TRANSITION_EASE}`,
               }
             : undefined;
           return (

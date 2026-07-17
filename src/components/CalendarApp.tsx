@@ -7,7 +7,7 @@ import { EventDetailSheet } from "@/components/event-sheet/EventDetailSheet";
 import { FlyingDayNumbers, type FlyingRect } from "@/components/transitions/FlyingDayNumbers";
 import { calendars, events as initialEvents, reminders } from "@/lib/mock-data";
 import { addDays, dateKey, startOfDay, startOfWeek } from "@/lib/date-utils";
-import { TRANSITION_MS } from "@/lib/transition-constants";
+import { TRANSITION_MS, TRANSITION_MS_AFTER_EXIT } from "@/lib/transition-constants";
 import type { CalendarEvent } from "@/lib/types";
 
 type Screen = "month" | "day";
@@ -148,10 +148,14 @@ export function CalendarApp() {
 
   useLayoutEffect(() => {
     if (!transition || !transition.armed) return;
+    // Below-the-fold ("after") week rows animate off over
+    // TRANSITION_MS_AFTER_EXIT during a toDay transition, so MonthView must
+    // stay mounted at least that long or its exit gets cut off mid-flight.
+    const timeoutMs = transition.mode === "toDay" ? TRANSITION_MS_AFTER_EXIT : TRANSITION_MS;
     const timer = setTimeout(() => {
       setScreen(transition.mode === "toDay" ? "day" : "month");
       setTransition(null);
-    }, TRANSITION_MS);
+    }, timeoutMs);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transition?.armed]);

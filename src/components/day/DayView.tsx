@@ -85,6 +85,21 @@ export function DayView({
       }
     : undefined;
 
+  // The scrollable day content slides along with its fade — up into place
+  // while this view is entering, down and away while it's exiting — for a
+  // more deliberate month<->day transition. The mini week strip above stays
+  // on chromeStyle (opacity-only, no transform): FlyingDayNumbers measures
+  // its resting position mid-transition, which a moving transform would
+  // throw off.
+  const SLIDE_DISTANCE_PX = 32;
+  const contentStyle = transition
+    ? {
+        opacity: chromeIsOff ? 0 : 1,
+        transform: chromeIsOff ? `translateY(${SLIDE_DISTANCE_PX}px)` : "translateY(0)",
+        transition: `opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}, transform ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
+      }
+    : undefined;
+
   // The nav bar and bottom bar are pixel-identical, same-position UI chrome
   // in both views, so they must never fade/move — only one copy (the
   // exiting view's) stays visible; the entering view's copy stays invisible
@@ -98,7 +113,7 @@ export function DayView({
       <div
         ref={scrollRef}
         className="no-scrollbar absolute inset-0 overflow-y-auto pb-28 pt-32"
-        style={chromeStyle}
+        style={contentStyle}
       >
         <DayHeading date={selectedDate} />
         <AllDayLane events={allDayEvents} reminders={dayReminders} calendarsById={calendarsById} />
