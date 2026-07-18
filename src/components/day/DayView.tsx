@@ -268,11 +268,15 @@ export function DayView({
       onComplete: () => {
         springCancelRef.current = null;
         phaseRef.current = "idle";
-        // The base pane's DOM transform is otherwise never touched again
-        // once `swipe` goes back to null (no more inline style / effect
-        // drives it) — reset it now so a committed pane doesn't stay
-        // parked off-screen under its incoming (new-selectedDate) content.
-        applyOffset(0, direction, w);
+        // Don't reset the base pane's transform here: the spring's last
+        // onUpdate already left both panes in the correct final position
+        // (base off-screen, neighbor at 0 for a commit). Resetting the base
+        // pane to 0 right now — before React has swapped its content to the
+        // new selectedDate — would briefly bring the *old* date back into
+        // view on top of the correct neighbor pane, flickering for a frame.
+        // The reset below is deferred to a layout effect keyed on `swipe`
+        // going back to null, so it lands in the same paint as the base
+        // pane's content actually becoming the new date.
         setSwipe(null);
         if (pendingCommitRef.current && neighborDate) onSelectDate(neighborDate);
       },
@@ -301,6 +305,19 @@ export function DayView({
     const w = getContainerWidth();
     neighborPaneRef.current.style.transform = `translate3d(${offsetRef.current + swipe.direction * w}px, 0, 0)`;
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [swipe]);
+
+  // Once a swipe ends (commit or cancel), the base pane's DOM transform is
+  // never touched again — nothing else drives it. For a cancel it's already
+  // sitting at 0 (the spring settled there). For a commit it's sitting
+  // off-screen, and by this point `selectedDate` has updated to match, so
+  // the base pane's content is already the (former) neighbor's — reset its
+  // transform to 0 now, in the same layout-effect pass as that content
+  // change, so the pane lands on-screen without an intervening paint.
+  useLayoutEffect(() => {
+    if (swipe) return;
+    offsetRef.current = 0;
+    if (basePaneRef.current) basePaneRef.current.style.transform = "translate3d(0px, 0, 0)";
   }, [swipe]);
 
   // Arms the programmatic jump a frame after mount so the browser observes
