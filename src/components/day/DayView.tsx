@@ -66,7 +66,7 @@ interface DragTrackState {
 
 const SWIPE_LOCK_THRESHOLD_PX = 8;
 // iOS paging scroll views commit past the halfway point...
-const SWIPE_COMMIT_DISTANCE_RATIO = 0.5;
+const SWIPE_COMMIT_DISTANCE_RATIO = 0.35;
 // ...or on any decisive flick, regardless of how far it's traveled yet — a
 // quick 20px flick should turn the page just as a slow 300px drag does.
 const SWIPE_COMMIT_VELOCITY_PX_PER_MS = 0.28;
