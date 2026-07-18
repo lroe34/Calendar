@@ -218,6 +218,16 @@ export function DayView({
   const springCancelRef = useRef<(() => void) | null>(null);
   const dragRef = useRef<DragTrackState | null>(null);
 
+  // The mini week strip's selected-day indicator shouldn't wait for
+  // onSelectDate (which only fires once the settle animation finishes) —
+  // real scroll views flip a page indicator the instant the content crosses
+  // the halfway point, live during a drag and mid-flight during a
+  // programmatic settle alike. crossedMidpointRef mirrors the state
+  // without forcing a re-render on every frame; the state only changes
+  // (and re-renders) on the crossing itself.
+  const crossedMidpointRef = useRef(false);
+  const [swipeCrossedMidpoint, setSwipeCrossedMidpoint] = useState(false);
+
   useEffect(() => {
     return () => springCancelRef.current?.();
   }, []);
@@ -232,6 +242,15 @@ export function DayView({
     if (basePaneRef.current) basePaneRef.current.style.transform = `translate3d(${offsetPx}px, 0, 0)`;
     if (neighborPaneRef.current) {
       neighborPaneRef.current.style.transform = `translate3d(${offsetPx + direction * width}px, 0, 0)`;
+    }
+
+    if (width > 0) {
+      const progress = direction === 1 ? -offsetPx / width : offsetPx / width;
+      const crossed = progress > 0.5;
+      if (crossed !== crossedMidpointRef.current) {
+        crossedMidpointRef.current = crossed;
+        setSwipeCrossedMidpoint(crossed);
+      }
     }
   }
 
@@ -386,6 +405,8 @@ export function DayView({
     startSettle(0, 0, false, d.direction);
   }
 
+  const miniStripDate = swipe && swipeCrossedMidpoint ? swipe.neighborDate : selectedDate;
+
   const chromeIsOff = transition ? (transition.mode === "exit" ? transition.armed : !transition.armed) : false;
   const chromeStyle = transition
     ? { opacity: chromeIsOff ? 0 : 1, transition: `opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}` }
@@ -448,7 +469,7 @@ export function DayView({
             <TopNavBar backLabel={MONTH_NAMES[selectedDate.getMonth()].slice(0, 3)} onBack={onBack} />
           </div>
           <MiniWeekStrip
-            selectedDate={selectedDate}
+            selectedDate={miniStripDate}
             today={today}
             onSelectDate={navigateTo}
             hiddenDayKeys={transition?.hiddenDayKeys}
