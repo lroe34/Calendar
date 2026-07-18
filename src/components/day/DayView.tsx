@@ -1,16 +1,14 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent, TransitionEvent as ReactTransitionEvent } from "react";
 import type { CalendarEvent, CalendarSource, Reminder } from "@/lib/types";
-import { MONTH_NAMES, isSameDay } from "@/lib/date-utils";
-import { HOUR_HEIGHT_PX } from "@/lib/day-grid";
+import { MONTH_NAMES, addDays, isSameDay, startOfDay } from "@/lib/date-utils";
 import { TopNavBar } from "@/components/shared/TopNavBar";
 import { BottomBar } from "@/components/shared/BottomBar";
 import { TRANSITION_MS, TRANSITION_EASE } from "@/lib/transition-constants";
 import { MiniWeekStrip } from "./MiniWeekStrip";
-import { DayHeading } from "./DayHeading";
-import { AllDayLane } from "./AllDayLane";
-import { HourGrid } from "./HourGrid";
+import { DayContentPane } from "./DayContentPane";
 
 export interface DayViewTransition {
   mode: "exit" | "enter";
@@ -36,6 +34,25 @@ interface DayViewProps {
   transition?: DayViewTransition | null;
 }
 
+/** Day-to-day horizontal navigation, either a live finger drag or a
+ *  programmatic jump (mini-strip tap, Today button). Both funnel through the
+ *  same slide so navigating several days away is one continuous motion —
+ *  never a series of per-day hops through the dates in between. */
+interface SwipeState {
+  neighborDate: Date;
+  direction: 1 | -1; // 1 = neighbor is later (content slides left), -1 = earlier (slides right)
+  offsetPx: number;
+  /** "pending": just armed for a programmatic jump, one frame before the
+   *  transition kicks in. "drag": tracking the pointer 1:1, no transition.
+   *  "settling": animating to rest (commit or cancel). */
+  phase: "pending" | "drag" | "settling";
+  /** Whether reaching the settle target should commit (call onSelectDate). */
+  pendingCommit: boolean;
+}
+
+const SWIPE_LOCK_THRESHOLD_PX = 8;
+const SWIPE_COMMIT_RATIO = 0.3;
+
 export function DayView({
   today,
   selectedDate,
@@ -49,45 +66,9 @@ export function DayView({
   transition = null,
 }: DayViewProps) {
   const calendarsById = useMemo(() => new Map(calendars.map((c) => [c.id, c])), [calendars]);
-  const isToday = isSameDay(selectedDate, today);
 
-  const allDayEvents = useMemo(
-    () =>
-      events.filter((e) => {
-        if (!e.isAllDay) return false;
-        const start = new Date(e.start);
-        const end = new Date(e.end);
-        return start.getTime() <= selectedDate.getTime() && end.getTime() >= selectedDate.getTime();
-      }),
-    [events, selectedDate],
-  );
-
-  const dayReminders = useMemo(
-    () =>
-      reminders.filter((r) => r.due && isSameDay(new Date(r.due), selectedDate)),
-    [reminders, selectedDate],
-  );
-
-  const timedEvents = useMemo(
-    () => events.filter((e) => !e.isAllDay && isSameDay(new Date(e.start), selectedDate)),
-    [events, selectedDate],
-  );
-
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const container = scrollRef.current;
-    if (!container) return;
-    const scrollToMinutes = isToday ? new Date().getHours() * 60 + new Date().getMinutes() : 8 * 60;
-    const target = Math.max(0, (scrollToMinutes / 60) * HOUR_HEIGHT_PX - 120);
-    container.scrollTop = target;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDate.getTime()]);
-
-  // The header (nav + mini strip + day heading + all-day lane) is pinned in
-  // place, not part of the scroll flow, so the hour grid below needs its own
-  // top offset kept in sync with the header's real (variable — the all-day
-  // lane can wrap to multiple lines) height.
+  // The pinned chrome (nav bar + mini week strip) sits above the swipeable
+  // day panes; its height tells each pane where its own content starts.
   const headerRef = useRef<HTMLDivElement>(null);
   const [headerHeight, setHeaderHeight] = useState(0);
 
@@ -95,7 +76,7 @@ export function DayView({
     const el = headerRef.current;
     if (!el) return;
     setHeaderHeight(el.getBoundingClientRect().height);
-  }, [selectedDate.getTime(), allDayEvents.length, dayReminders.length]);
+  }, []);
 
   useEffect(() => {
     const el = headerRef.current;
@@ -105,206 +86,221 @@ export function DayView({
     return () => observer.disconnect();
   }, []);
 
-  const chromeIsOff = transition ? (transition.mode === "exit" ? transition.armed : !transition.armed) : false;
-  const chromeStyle = transition
-    ? {
-        opacity: chromeIsOff ? 0 : 1,
-        transition: `opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
-      }
-    : undefined;
-
-  // Both enter and exit use WAAPI so they share the same animation driver as
-  // FlyingDayNumbers — identical engine, easing, and start frame for all
-  // three elements across the full 400ms.
-  //
-  // Enter: WAAPI avoids paint-timing races on a fresh mount. A CSS transition
-  // needs the browser to paint the pre-animation frame between the two rAFs;
-  // under load those rAFs can both fire before any paint, silently skipping
-  // the animation. WAAPI starts on its own timeline the instant animate() is
-  // called, with no paint dependency.
-  //
-  // Exit: existing painted element, so no race — but using WAAPI matches the
-  // driver so progress curves stay locked with enter and the flying numbers.
-  const contentAnimRef = useRef<Animation | null>(null);
-  // Mirrors contentAnimRef for the day-heading/all-day-lane group, which
-  // slides in lockstep with the scroll content (same distance, duration,
-  // easing) but leaves its fade to the shared chrome opacity transition
-  // below — it already lives inside that fading backdrop, so animating
-  // opacity here too would just double up on it.
-  const headerContentRef = useRef<HTMLDivElement>(null);
-  const headerContentAnimRef = useRef<Animation | null>(null);
-  // Guards against re-triggering: CalendarApp hands down a fresh `transition`
-  // object reference on every armed/etc. change, so this can't key off
-  // object identity — it needs to fire exactly once per DayView mount (each
-  // enter transition is itself a fresh mount, so a plain boolean is enough).
-  const hasStartedEnterAnimRef = useRef(false);
-  // Mirrors contentAnimRef into state so starting the animation actually
-  // triggers the re-render that clears the placeholder below — a ref write
-  // alone is invisible to React and never repaints. Without this, the
-  // placeholder's inline opacity: 0 stays on the element for the whole
-  // animation; once WAAPI's own effect is cancelled on finish, the element
-  // reverts to that stale opacity: 0 instead of the neutral value, flashing
-  // the content invisible right as the animation settles.
-  const [enterAnimStarted, setEnterAnimStarted] = useState(false);
-  // Exit guard: same once-per-mode-per-mount pattern as enter.
-  const hasStartedExitAnimRef = useRef(false);
-
-  useLayoutEffect(() => {
-    // Wait for `armed` so this starts in the same commit as FlyingDayNumbers
-    // (and the selected week's exit). Starting on slideDistancePx alone races
-    // ahead of the double-rAF arm in CalendarApp.
-    if (
-      !transition ||
-      transition.mode !== "enter" ||
-      transition.slideDistancePx == null ||
-      !transition.armed
-    ) {
-      return;
-    }
-    if (hasStartedEnterAnimRef.current) return;
-    const el = scrollRef.current;
-    if (!el) return;
-    hasStartedEnterAnimRef.current = true;
-    const anim = el.animate(
-      [
-        { transform: `translateY(${transition.slideDistancePx}px)`, opacity: 0 },
-        { transform: "translateY(0px)", opacity: 1 },
-      ],
-      { duration: TRANSITION_MS, easing: TRANSITION_EASE },
-    );
-    contentAnimRef.current = anim;
-    setEnterAnimStarted(true);
-    anim.finished.then(() => anim.cancel()).catch(() => {});
-
-    const headerAnim = headerContentRef.current?.animate(
-      [
-        { transform: `translateY(${transition.slideDistancePx}px)` },
-        { transform: "translateY(0px)" },
-      ],
-      { duration: TRANSITION_MS, easing: TRANSITION_EASE },
-    );
-    if (headerAnim) {
-      headerContentAnimRef.current = headerAnim;
-      headerAnim.finished.then(() => headerAnim.cancel()).catch(() => {});
-    }
-  }, [transition]);
-
-  useLayoutEffect(() => {
-    if (
-      !transition ||
-      transition.mode !== "exit" ||
-      transition.slideDistancePx == null ||
-      !transition.armed
-    ) {
-      return;
-    }
-    if (hasStartedExitAnimRef.current) return;
-    const el = scrollRef.current;
-    if (!el) return;
-    hasStartedExitAnimRef.current = true;
-
-    const anim = el.animate(
-      [
-        { transform: "translateY(0px)", opacity: 1 },
-        { transform: `translateY(${transition.slideDistancePx}px)`, opacity: 0 },
-      ],
-      { duration: TRANSITION_MS, easing: TRANSITION_EASE, fill: "forwards" },
-    );
-    contentAnimRef.current = anim;
-
-    const headerAnim = headerContentRef.current?.animate(
-      [
-        { transform: "translateY(0px)" },
-        { transform: `translateY(${transition.slideDistancePx}px)` },
-      ],
-      { duration: TRANSITION_MS, easing: TRANSITION_EASE, fill: "forwards" },
-    );
-    if (headerAnim) headerContentAnimRef.current = headerAnim;
-  }, [transition]);
+  const swipeContainerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
 
   useEffect(() => {
-    return () => {
-      contentAnimRef.current?.cancel();
-      contentAnimRef.current = null;
-      headerContentAnimRef.current?.cancel();
-      headerContentAnimRef.current = null;
-    };
+    const el = swipeContainerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => setContainerWidth(entry.contentRect.width));
+    observer.observe(el);
+    return () => observer.disconnect();
   }, []);
 
-  const isEnterAwaitingAnimation = transition?.mode === "enter" && !enterAnimStarted;
-  const contentStyle = transition
-    ? transition.mode === "enter"
-      ? // Neutral placeholder until the WAAPI animation takes over (which,
-        // once playing, overrides these inline values for its properties).
-        { opacity: isEnterAwaitingAnimation ? 0 : undefined, transform: undefined, transition: "none" }
-      : // Exit: WAAPI drives the slide/fade; suppress CSS transitions so they
-        // don't fight the WAAPI effect.
-        { transition: "none" }
-    : undefined;
+  const getContainerWidth = () =>
+    containerWidth || swipeContainerRef.current?.getBoundingClientRect().width || window.innerWidth;
 
-  // Transform-only counterpart of contentStyle for the day-heading/all-day
-  // -lane group: same slide, but no opacity of its own since the wrapping
-  // backdrop below already fades it via chromeStyle.
-  const headerContentStyle = transition
-    ? transition.mode === "enter"
-      ? { transform: undefined, transition: "none" }
-      : { transition: "none" }
-    : undefined;
+  const [swipe, setSwipe] = useState<SwipeState | null>(null);
+  const dragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    locked: "x" | "y" | null;
+  } | null>(null);
 
-  // Top/bottom toolbars crossfade with the rest of the chrome (back label
-  // included) rather than freezing on the exiting copy. z-40 keeps them
-  // above sliding month "after" rows when this layer is on top; when it's
-  // underneath, the other view's fading toolbar leaves a hole so this one
-  // can show through.
-  const navStyle = chromeStyle;
+  // Programmatic jump (mini strip tap, Today button): arm a slide toward
+  // `date` in a single motion, whatever the distance, rather than updating
+  // selectedDate directly (which would just snap with no transition, or —
+  // if callers stepped through it themselves — hop day by day).
+  function navigateTo(date: Date) {
+    const target = startOfDay(date);
+    if (transition || swipe) return;
+    if (isSameDay(target, selectedDate)) return;
+    const direction: 1 | -1 = target.getTime() > selectedDate.getTime() ? 1 : -1;
+    setSwipe({ neighborDate: target, direction, offsetPx: 0, phase: "pending", pendingCommit: true });
+  }
+
+  // Arms the programmatic jump a frame after mount so the browser observes
+  // the neighbor pane's off-screen starting frame before animating it in.
+  useLayoutEffect(() => {
+    if (!swipe || swipe.phase !== "pending") return;
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        setSwipe((s) => {
+          if (!s || s.phase !== "pending") return s;
+          return { ...s, phase: "settling", offsetPx: -s.direction * getContainerWidth() };
+        });
+      });
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [swipe?.phase === "pending"]);
+
+  function handlePointerDown(e: ReactPointerEvent) {
+    if (transition) return;
+    if (swipe) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    dragRef.current = { pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, locked: null };
+  }
+
+  function handlePointerMove(e: ReactPointerEvent) {
+    const d = dragRef.current;
+    if (!d || d.pointerId !== e.pointerId) return;
+    const dx = e.clientX - d.startX;
+    const dy = e.clientY - d.startY;
+    if (d.locked === null) {
+      if (Math.abs(dx) < SWIPE_LOCK_THRESHOLD_PX && Math.abs(dy) < SWIPE_LOCK_THRESHOLD_PX) return;
+      d.locked = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+      if (d.locked === "x") {
+        const direction: 1 | -1 = dx < 0 ? 1 : -1;
+        setSwipe({
+          neighborDate: addDays(selectedDate, direction),
+          direction,
+          offsetPx: 0,
+          phase: "drag",
+          pendingCommit: false,
+        });
+      }
+    }
+    if (d.locked !== "x") return;
+    const w = getContainerWidth();
+    setSwipe((s) => {
+      if (!s || s.phase !== "drag") return s;
+      // Clamp to the locked direction's half of the range: dragging back
+      // past the resting position would otherwise slide the base pane the
+      // "wrong" way with nothing mounted behind it.
+      const [lo, hi] = s.direction === 1 ? [-w, 0] : [0, w];
+      return { ...s, offsetPx: Math.max(lo, Math.min(hi, dx)) };
+    });
+  }
+
+  function settleDrag(commit: boolean) {
+    setSwipe((s) => {
+      if (!s || s.phase !== "drag") return s;
+      const w = getContainerWidth();
+      return { ...s, phase: "settling", offsetPx: commit ? -s.direction * w : 0, pendingCommit: commit };
+    });
+  }
+
+  function handlePointerUp(e: ReactPointerEvent) {
+    const d = dragRef.current;
+    dragRef.current = null;
+    if (!d || d.pointerId !== e.pointerId || d.locked !== "x") return;
+    const w = getContainerWidth();
+    const dx = e.clientX - d.startX;
+    settleDrag(Math.abs(dx) / w > SWIPE_COMMIT_RATIO);
+  }
+
+  function handlePointerCancel(e: ReactPointerEvent) {
+    const d = dragRef.current;
+    dragRef.current = null;
+    if (!d || d.pointerId !== e.pointerId || d.locked !== "x") return;
+    settleDrag(false);
+  }
+
+  // Fires when the base pane's own transform transition ends (only active
+  // during "settling"; drag/pending render with transition: none, so this
+  // can't fire mid-drag). Guarded to this element's own transform so a
+  // bubbled transitionend from unrelated child animations can't trigger it.
+  function handleSettleEnd(e: ReactTransitionEvent) {
+    if (e.target !== e.currentTarget || e.propertyName !== "transform") return;
+    if (!swipe || swipe.phase !== "settling") return;
+    const { pendingCommit, neighborDate } = swipe;
+    setSwipe(null);
+    if (pendingCommit) onSelectDate(neighborDate);
+  }
+
+  const paneTransition = swipe?.phase === "settling" ? `transform ${TRANSITION_MS}ms ${TRANSITION_EASE}` : "none";
+  const baseX = swipe ? swipe.offsetPx : 0;
+  const neighborX = swipe ? swipe.offsetPx + swipe.direction * containerWidth : 0;
+
+  const chromeIsOff = transition ? (transition.mode === "exit" ? transition.armed : !transition.armed) : false;
+  const chromeStyle = transition
+    ? { opacity: chromeIsOff ? 0 : 1, transition: `opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}` }
+    : undefined;
 
   return (
     <div className={`fixed inset-0 overflow-hidden ${transition ? "pointer-events-none" : ""}`}>
-      {/* The hour grid opts back into pointer events even mid-transition —
-          scrolling (and the momentum it carries into the settled view)
-          shouldn't have to wait for the flying-numbers animation to finish. */}
       <div
-        ref={scrollRef}
-        className="no-scrollbar pointer-events-auto absolute inset-0 overflow-y-auto pb-28 mt-3"
-        style={{ ...contentStyle, paddingTop: headerHeight }}
+        ref={swipeContainerRef}
+        className="pointer-events-auto absolute inset-0"
+        style={{ touchAction: "pan-y" }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
       >
-        <HourGrid
-          events={timedEvents}
-          calendarsById={calendarsById}
-          isToday={isToday}
-          onSelectEvent={onSelectEvent}
-        />
+        <div
+          className="absolute inset-0"
+          style={{ transform: `translateX(${baseX}px)`, transition: paneTransition }}
+          onTransitionEnd={handleSettleEnd}
+        >
+          <DayContentPane
+            date={selectedDate}
+            today={today}
+            events={events}
+            reminders={reminders}
+            calendarsById={calendarsById}
+            onSelectEvent={onSelectEvent}
+            topOffset={headerHeight}
+            verticalTransition={
+              transition
+                ? {
+                    mode: transition.mode,
+                    armed: transition.armed,
+                    slideDistancePx: transition.slideDistancePx,
+                  }
+                : null
+            }
+          />
+        </div>
+
+        {swipe && (
+          <div
+            className="absolute inset-0"
+            style={{ transform: `translateX(${neighborX}px)`, transition: paneTransition }}
+          >
+            <DayContentPane
+              date={swipe.neighborDate}
+              today={today}
+              events={events}
+              reminders={reminders}
+              calendarsById={calendarsById}
+              onSelectEvent={onSelectEvent}
+              topOffset={headerHeight}
+              verticalTransition={null}
+            />
+          </div>
+        )}
       </div>
 
       <div ref={headerRef} className="absolute inset-x-0 top-0 z-20">
-        {/* Single frosted pane spanning nav band + header content — one
-            continuous backdrop-blur region, no seam. The invisible twin lives
-            inside it so its height is part of the same blur surface. The real
-            toolbar is a transparent absolute z-40 sibling so it stacks above
-            sliding "after" rows without adding a second blur region. */}
-        <div className="bg-white/60 backdrop-blur-sm dark:bg-black/60 border-b border-black/[.06] dark:border-white/[.08]" style={chromeStyle}>
+        {/* Pinned chrome: nav band + mini strip only. Day heading / all-day
+            lane now live inside each swipeable DayContentPane so they slide
+            with the hour grid instead of snapping. */}
+        <div className="bg-white/60 backdrop-blur-sm dark:bg-black/60" style={chromeStyle}>
           <div className="invisible" aria-hidden>
             <TopNavBar backLabel={MONTH_NAMES[selectedDate.getMonth()].slice(0, 3)} onBack={onBack} />
           </div>
           <MiniWeekStrip
             selectedDate={selectedDate}
             today={today}
-            onSelectDate={onSelectDate}
+            onSelectDate={navigateTo}
             hiddenDayKeys={transition?.hiddenDayKeys}
           />
-          <div ref={headerContentRef} style={headerContentStyle}>
-            <DayHeading date={selectedDate} />
-            <AllDayLane events={allDayEvents} reminders={dayReminders} calendarsById={calendarsById} />
-          </div>
         </div>
       </div>
 
-      <div className="absolute inset-x-0 top-0 z-40" style={navStyle}>
+      <div className="absolute inset-x-0 top-0 z-40" style={chromeStyle}>
         <TopNavBar backLabel={MONTH_NAMES[selectedDate.getMonth()].slice(0, 3)} onBack={onBack} />
       </div>
 
-      <div className="absolute inset-x-0 bottom-0 z-40" style={navStyle}>
-        <BottomBar onToday={() => onSelectDate(today)} onGridView={onGridView} />
+      <div className="absolute inset-x-0 bottom-0 z-40" style={chromeStyle}>
+        <BottomBar onToday={() => navigateTo(today)} onGridView={onGridView} />
       </div>
     </div>
   );
