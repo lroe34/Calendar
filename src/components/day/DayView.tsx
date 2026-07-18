@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import type { CalendarEvent, CalendarSource, Reminder } from "@/lib/types";
 import { MONTH_NAMES, addDays, isSameDay, startOfDay } from "@/lib/date-utils";
 import { TopNavBar } from "@/components/shared/TopNavBar";
@@ -84,6 +84,16 @@ const SPRING_STIFFNESS = SPRING_ANGULAR_FREQUENCY ** 2;
 const SPRING_DAMPING = 2 * SPRING_DAMPING_FRACTION * SPRING_ANGULAR_FREQUENCY;
 const SPRING_REST_DISPLACEMENT_PX = 0.25;
 const SPRING_REST_VELOCITY_PX_PER_S = 40;
+
+// Promotes a pane to its own GPU-composited layer up front, before any
+// gesture starts. Without this, mobile Safari tends to defer layer creation
+// until the first transform write and then repaint the pane's contents
+// (event blocks, text) on the frames around that promotion — visible as a
+// brief flicker right as a swipe begins.
+const PANE_LAYER_STYLE: CSSProperties = {
+  willChange: "transform",
+  backfaceVisibility: "hidden",
+};
 
 /** Damped mass-spring integrated with semi-implicit Euler, ticked on rAF.
  *  Returns a cancel function. Velocity is continuous across calls (callers
@@ -208,15 +218,39 @@ export function DayView({
   const springCancelRef = useRef<(() => void) | null>(null);
   const dragRef = useRef<DragTrackState | null>(null);
 
+  // The mini week strip's selected-day indicator shouldn't wait for
+  // onSelectDate (which only fires once the settle animation finishes) —
+  // real scroll views flip a page indicator the instant the content crosses
+  // the halfway point, live during a drag and mid-flight during a
+  // programmatic settle alike. crossedMidpointRef mirrors the state
+  // without forcing a re-render on every frame; the state only changes
+  // (and re-renders) on the crossing itself.
+  const crossedMidpointRef = useRef(false);
+  const [swipeCrossedMidpoint, setSwipeCrossedMidpoint] = useState(false);
+
   useEffect(() => {
     return () => springCancelRef.current?.();
   }, []);
 
   function applyOffset(offsetPx: number, direction: 1 | -1, width: number) {
     offsetRef.current = offsetPx;
-    if (basePaneRef.current) basePaneRef.current.style.transform = `translateX(${offsetPx}px)`;
+    // translate3d (not translateX) keeps each pane on its own GPU-composited
+    // layer for the whole gesture. With a plain 2D translateX, mobile Safari
+    // will repaint the pane's contents (event blocks, text) on some frames
+    // instead of just recompositing the existing layer, which reads as a
+    // flicker on the events sliding underneath.
+    if (basePaneRef.current) basePaneRef.current.style.transform = `translate3d(${offsetPx}px, 0, 0)`;
     if (neighborPaneRef.current) {
-      neighborPaneRef.current.style.transform = `translateX(${offsetPx + direction * width}px)`;
+      neighborPaneRef.current.style.transform = `translate3d(${offsetPx + direction * width}px, 0, 0)`;
+    }
+
+    if (width > 0) {
+      const progress = direction === 1 ? -offsetPx / width : offsetPx / width;
+      const crossed = progress > 0.5;
+      if (crossed !== crossedMidpointRef.current) {
+        crossedMidpointRef.current = crossed;
+        setSwipeCrossedMidpoint(crossed);
+      }
     }
   }
 
@@ -265,7 +299,7 @@ export function DayView({
   useLayoutEffect(() => {
     if (!swipe || !neighborPaneRef.current) return;
     const w = getContainerWidth();
-    neighborPaneRef.current.style.transform = `translateX(${offsetRef.current + swipe.direction * w}px)`;
+    neighborPaneRef.current.style.transform = `translate3d(${offsetRef.current + swipe.direction * w}px, 0, 0)`;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [swipe]);
 
@@ -371,6 +405,8 @@ export function DayView({
     startSettle(0, 0, false, d.direction);
   }
 
+  const miniStripDate = swipe && swipeCrossedMidpoint ? swipe.neighborDate : selectedDate;
+
   const chromeIsOff = transition ? (transition.mode === "exit" ? transition.armed : !transition.armed) : false;
   const chromeStyle = transition
     ? { opacity: chromeIsOff ? 0 : 1, transition: `opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}` }
@@ -387,7 +423,7 @@ export function DayView({
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
       >
-        <div ref={basePaneRef} className="absolute inset-0">
+        <div ref={basePaneRef} className="absolute inset-0" style={PANE_LAYER_STYLE}>
           <DayContentPane
             date={selectedDate}
             today={today}
@@ -409,7 +445,7 @@ export function DayView({
         </div>
 
         {swipe && (
-          <div ref={neighborPaneRef} className="absolute inset-0">
+          <div ref={neighborPaneRef} className="absolute inset-0" style={PANE_LAYER_STYLE}>
             <DayContentPane
               date={swipe.neighborDate}
               today={today}
@@ -433,7 +469,7 @@ export function DayView({
             <TopNavBar backLabel={MONTH_NAMES[selectedDate.getMonth()].slice(0, 3)} onBack={onBack} />
           </div>
           <MiniWeekStrip
-            selectedDate={selectedDate}
+            selectedDate={miniStripDate}
             today={today}
             onSelectDate={navigateTo}
             hiddenDayKeys={transition?.hiddenDayKeys}
