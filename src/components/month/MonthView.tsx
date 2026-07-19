@@ -21,6 +21,7 @@ interface MonthViewProps {
   events: CalendarEvent[];
   calendars: CalendarSource[];
   onSelectDate: (date: Date) => void;
+  onBack: (year: number, month: number) => void;
   onGridView?: () => void;
   transition?: MonthViewTransition | null;
 }
@@ -37,6 +38,7 @@ export function MonthView({
   events,
   calendars,
   onSelectDate,
+  onBack,
   onGridView,
   transition = null,
 }: MonthViewProps) {
@@ -231,7 +233,10 @@ export function MonthView({
           z-index can sit above sliding "after" rows, and so the top bar isn't
           trapped under sticky week chrome. */}
       <div className="absolute inset-x-0 top-0 z-40" style={navStyle}>
-        <TopNavBar backLabel={`${visibleSection.year}`} onBack={() => {}} />
+        <TopNavBar
+          backLabel={`${visibleSection.year}`}
+          onBack={() => onBack(visibleSection.year, visibleSection.month)}
+        />
       </div>
 
       <div className="absolute inset-x-0 bottom-0 z-40" style={navStyle}>

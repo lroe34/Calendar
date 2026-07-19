@@ -6,9 +6,11 @@ interface BottomBarProps {
   onToday: () => void;
   onGridView?: () => void;
   onInbox?: () => void;
+  /** Unread count shown as a small red badge on the inbox icon; omitted when falsy. */
+  inboxBadge?: number;
 }
 
-export function BottomBar({ onToday, onGridView, onInbox }: BottomBarProps) {
+export function BottomBar({ onToday, onGridView, onInbox, inboxBadge }: BottomBarProps) {
   return (
     <div className="pointer-events-none flex items-end justify-between px-4 pb-4 pt-6">
 
@@ -23,8 +25,13 @@ export function BottomBar({ onToday, onGridView, onInbox }: BottomBarProps) {
         <button onClick={onGridView} aria-label="Calendar view" className="text-black dark:text-white">
           <CalendarGridIcon className="h-5 w-5" />
         </button>
-        <button onClick={onInbox} aria-label="Inbox" className="text-black dark:text-white">
+        <button onClick={onInbox} aria-label="Inbox" className="relative text-black dark:text-white">
           <InboxIcon className="h-5 w-5" />
+          {!!inboxBadge && (
+            <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-[3px] text-[10px] font-semibold leading-none text-white">
+              {inboxBadge}
+            </span>
+          )}
         </button>
       </div>
     </div>
