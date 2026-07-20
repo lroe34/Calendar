@@ -13,17 +13,21 @@ export type WeekTransitionPhase = "before" | "selected" | "after";
 
 /** Off-screen resting transform for a row/header at the given transition
  *  phase. "after" rows travel fully off the bottom of the viewport (they're
- *  not visually related to anything staying behind). "before" rows/headers
- *  only travel as far as the flying day-numbers do — the same distance
- *  DayView's content slides by — so they move as a group and fade out
- *  rather than flying off the top of the screen. Falls back to the old
- *  full-viewport travel if the distance isn't measured yet. */
+ *  not visually related to anything staying behind). "before" and
+ *  "selected" rows/headers only travel as far as the flying day-numbers do
+ *  — the same distance DayView's content slides by — so the whole group
+ *  above the fold moves and fades together rather than the selected row's
+ *  own events flying off the top independently of its (now-hidden) day
+ *  number. Falls back to the old full-viewport travel if the distance
+ *  isn't measured yet. */
 export function weekOffTransform(
   phase: WeekTransitionPhase | null | undefined,
   slideDistancePx: number | null | undefined,
 ): string {
   if (phase === "after") return "translateY(100vh)";
-  if (phase === "before" && slideDistancePx != null) return `translateY(-${slideDistancePx}px)`;
+  if ((phase === "before" || phase === "selected") && slideDistancePx != null) {
+    return `translateY(-${slideDistancePx}px)`;
+  }
   return "translateY(-100vh)";
 }
 
