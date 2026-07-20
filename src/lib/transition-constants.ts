@@ -1,4 +1,4 @@
-export const TRANSITION_MS = 400;
+export const TRANSITION_MS = 300;
 export const TRANSITION_EASE = "cubic-bezier(0.42, 0, 0.58, 1.0)";
 
 /**
@@ -7,4 +7,4 @@ export const TRANSITION_EASE = "cubic-bezier(0.42, 0, 0.58, 1.0)";
  * above they finish that visible portion of the trip almost instantly. Give
  * their exit its own, longer duration so the motion actually reads.
  */
-export const TRANSITION_MS_AFTER_EXIT = 400;
+export const TRANSITION_MS_AFTER_EXIT = 300;
