@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { MONTH_ABBR, generateCalendarMonths, isSameDay } from "@/lib/date-utils";
 
 interface MiniMonthCardProps {
@@ -7,9 +8,11 @@ interface MiniMonthCardProps {
   month: number;
   today: Date;
   onSelect: (year: number, month: number) => void;
+  /** Drives the year <-> month zoom: slides/fades this card relative to the transition's target month. */
+  style?: CSSProperties;
 }
 
-export function MiniMonthCard({ year, month, today, onSelect }: MiniMonthCardProps) {
+export function MiniMonthCard({ year, month, today, onSelect, style }: MiniMonthCardProps) {
   const section = generateCalendarMonths(year, month, 0, 0)[0];
   const isCurrentMonth = year === today.getFullYear() && month === today.getMonth();
 
@@ -17,6 +20,7 @@ export function MiniMonthCard({ year, month, today, onSelect }: MiniMonthCardPro
     <button
       data-cal-year-month={`${year}-${month}`}
       onClick={() => onSelect(year, month)}
+      style={style}
       className="flex min-w-0 flex-col items-stretch text-left"
     >
       <h3

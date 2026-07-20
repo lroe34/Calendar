@@ -20,8 +20,11 @@ type Screen = "month" | "day" | "year";
  * month, so it doubles as that month's own matched-geometry frame — no need
  * to isolate a sub-rect within it. Shrinking/growing the whole fixed month
  * layer between the full viewport and the tapped mini-card's measured rect
- * (leaving the year layer static underneath) reproduces the zoom with a
- * single transform instead of per-cell FLIP.
+ * reproduces the zoom with a single transform instead of per-cell FLIP. The
+ * month layer crossfades opacity with the year layer's matching mini-card
+ * (whose own siblings slide in/out from that card's position) rather than
+ * staying opaque throughout, so the swap at the end is seamless instead of a
+ * hard cut.
  */
 interface YearTransition {
   mode: "toYear" | "toMonth";
@@ -320,24 +323,24 @@ export function CalendarApp() {
   const dayZ = transition ? 1 : undefined;
   const yearZ = yearTransition ? 1 : undefined;
 
-  // Month is always the layer that visibly scales during a year transition
-  // (year itself is static underneath); it stays fully opaque throughout so
-  // the motion reads as a pure zoom rather than a cross-fade. "armed" is the
-  // resting/settled side of the animation in both directions (identity for
-  // toMonth, the mini-card rect for toYear); the CSS transition on `transform`
-  // animates between whichever two states that resolves to.
+  // "collapsed": shrunk/grown onto the mini-card's rect and faded to
+  // opacity 0, vs. filling the viewport at opacity 1. toYear and toMonth
+  // both animate between these two states — direction only decides which
+  // end is the resting one before the transition starts vs. after it ends.
+  // YearView's matching mini-card (and its siblings) animate as the exact
+  // inverse of this, so the two layers crossfade into each other instead of
+  // the swap at the end being a hard cut.
+  const monthCollapsed = yearTransition
+    ? yearTransition.mode === "toYear"
+      ? yearTransition.armed
+      : !yearTransition.armed
+    : false;
   const monthYearStyle: CSSProperties | undefined = yearTransition
     ? {
-        ...(yearTransition.mode === "toYear"
-          ? yearTransition.armed && yearTransition.smallRect
-            ? smallRectTransform(yearTransition.smallRect)
-            : { transform: "translate(0px, 0px) scale(1)", transformOrigin: "0 0" }
-          : yearTransition.armed
-            ? { transform: "translate(0px, 0px) scale(1)", transformOrigin: "0 0" }
-            : yearTransition.smallRect
-              ? smallRectTransform(yearTransition.smallRect)
-              : { transform: "translate(0px, 0px) scale(1)", transformOrigin: "0 0" }),
-        transition: `transform ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
+        ...(monthCollapsed && yearTransition.smallRect
+          ? { ...smallRectTransform(yearTransition.smallRect), opacity: 0 }
+          : { transform: "translate(0px, 0px) scale(1)", transformOrigin: "0 0", opacity: 1 }),
+        transition: `transform ${TRANSITION_MS}ms ${TRANSITION_EASE}, opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
       }
     : undefined;
 
@@ -388,6 +391,16 @@ export function CalendarApp() {
             anchorYear={yearTransition ? yearTransition.year : yearViewAnchor}
             onSelectMonth={handleSelectMonthFromYear}
             onGridView={() => setCalendarListOpen(true)}
+            transition={
+              yearTransition
+                ? {
+                    mode: yearTransition.mode === "toYear" ? "enter" : "exit",
+                    targetYear: yearTransition.year,
+                    targetMonth: yearTransition.month,
+                    armed: yearTransition.armed,
+                  }
+                : null
+            }
           />
         </div>
       )}
