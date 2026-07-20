@@ -89,11 +89,17 @@ export function YearView({ today, anchorYear, onSelectMonth, onGridView, transit
     return { dx: (vx / len) * travel, dy: (vy / len) * travel };
   }
 
-  // How far the target card itself travels toward the viewport's center as it
-  // scales up and fades — its half of the crossfade with the month layer
-  // growing from that same rect, so the swap reads as one card launching
-  // toward the viewer rather than a flat opacity dissolve in place.
-  const TARGET_SCALE = 1.6;
+  // How far the target card itself travels toward the viewport's center, and
+  // how much it scales up, as it fades — its half of the crossfade with the
+  // month layer growing from that same rect. The month layer (see
+  // CalendarApp's smallRectTransform) shrinks onto this same rect by
+  // `rect.width / innerWidth`; scaling the card up by the exact inverse
+  // means it reaches full-viewport size right as the month layer does, so
+  // the swap reads as one continuous zoom rather than a mismatched jump in
+  // scale once the crossfade lands.
+  function targetScale(rect: FlyingRect): number {
+    return window.innerWidth / rect.width;
+  }
 
   function targetCenterOffset(rect: FlyingRect): { dx: number; dy: number } {
     const rectCenterX = rect.left + rect.width / 2;
@@ -132,8 +138,8 @@ export function YearView({ today, anchorYear, onSelectMonth, onGridView, transit
     const transform = !displaced
       ? "translate(0px, 0px) scale(1)"
       : isTarget
-        ? targetOffset
-          ? `translate(${targetOffset.dx}px, ${targetOffset.dy}px) scale(${TARGET_SCALE})`
+        ? targetOffset && transition.smallRect
+          ? `translate(${targetOffset.dx}px, ${targetOffset.dy}px) scale(${targetScale(transition.smallRect)})`
           : "translate(0px, 0px) scale(1)"
         : offset
           ? `translate(${offset.dx}px, ${offset.dy}px)`
