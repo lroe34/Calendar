@@ -1,21 +1,32 @@
 "use client";
 
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { BottomBar } from "@/components/shared/BottomBar";
 import { PlusIcon, SearchIcon } from "@/components/shared/Icons";
+import { TRANSITION_MS, TRANSITION_EASE } from "@/lib/transition-constants";
 import { MiniMonthCard } from "./MiniMonthCard";
+
+export interface YearViewTransition {
+  /** "enter": year view is arriving (month is zooming out into it). "exit": year view is leaving (a tapped month is zooming up over it). */
+  mode: "enter" | "exit";
+  targetYear: number;
+  targetMonth: number;
+  /** Flips true one frame after mount so the off/resting swap is observed by the browser as a transition. */
+  armed: boolean;
+}
 
 interface YearViewProps {
   today: Date;
   anchorYear: number;
   onSelectMonth: (year: number, month: number) => void;
   onGridView?: () => void;
+  transition?: YearViewTransition | null;
 }
 
 const YEARS_BEFORE = 1;
 const YEARS_AFTER = 1;
 
-export function YearView({ today, anchorYear, onSelectMonth, onGridView }: YearViewProps) {
+export function YearView({ today, anchorYear, onSelectMonth, onGridView, transition = null }: YearViewProps) {
   const years = Array.from(
     { length: YEARS_BEFORE + YEARS_AFTER + 1 },
     (_, i) => anchorYear - YEARS_BEFORE + i,
@@ -40,6 +51,56 @@ export function YearView({ today, anchorYear, onSelectMonth, onGridView }: YearV
   function handleToday() {
     const idx = years.indexOf(today.getFullYear());
     if (idx >= 0) scrollToIndex(idx, true);
+  }
+
+  // Per-card pixel offset that lands each of the target month's 11 siblings
+  // exactly on top of it — the shared "collapsed" endpoint both directions
+  // animate toward/from, so the grid reads as bursting out of (or gathering
+  // into) whichever month is being zoomed, rather than just sitting static
+  // underneath the month layer.
+  const [siblingOffsets, setSiblingOffsets] = useState<Record<number, { dx: number; dy: number }> | null>(null);
+  const measuredForRef = useRef<string | null>(null);
+
+  useLayoutEffect(() => {
+    if (!transition) {
+      measuredForRef.current = null;
+      setSiblingOffsets(null);
+      return;
+    }
+    const key = `${transition.targetYear}-${transition.targetMonth}`;
+    if (measuredForRef.current === key) return;
+    const targetEl = document.querySelector<HTMLElement>(
+      `[data-cal-year-month="${transition.targetYear}-${transition.targetMonth}"]`,
+    );
+    if (!targetEl) return;
+    const targetRect = targetEl.getBoundingClientRect();
+    const offsets: Record<number, { dx: number; dy: number }> = {};
+    for (let m = 0; m < 12; m++) {
+      if (m === transition.targetMonth) continue;
+      const el = document.querySelector<HTMLElement>(`[data-cal-year-month="${transition.targetYear}-${m}"]`);
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      offsets[m] = { dx: targetRect.left - r.left, dy: targetRect.top - r.top };
+    }
+    measuredForRef.current = key;
+    setSiblingOffsets(offsets);
+  }, [transition]);
+
+  // "collapsed": gathered onto the target card and invisible — the state
+  // both directions share while the month layer on top is opaque. Mirrors
+  // MonthWeekRow's exit/enter off-state convention.
+  const collapsed = transition ? (transition.mode === "exit" ? transition.armed : !transition.armed) : false;
+
+  function cardStyle(year: number, month: number): CSSProperties | undefined {
+    if (!transition || transition.targetYear !== year) return undefined;
+    const isTarget = month === transition.targetMonth;
+    const offset = !isTarget ? siblingOffsets?.[month] : undefined;
+    if (!isTarget && !offset) return undefined;
+    return {
+      transform: collapsed && offset ? `translate(${offset.dx}px, ${offset.dy}px)` : "translate(0px, 0px)",
+      opacity: collapsed ? 0 : 1,
+      transition: `transform ${TRANSITION_MS}ms ${TRANSITION_EASE}, opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
+    };
   }
 
   return (
@@ -71,7 +132,14 @@ export function YearView({ today, anchorYear, onSelectMonth, onGridView }: YearV
               </h1>
               <div className="grid grid-cols-3 gap-x-4 gap-y-9">
                 {Array.from({ length: 12 }, (_, month) => (
-                  <MiniMonthCard key={month} year={year} month={month} today={today} onSelect={onSelectMonth} />
+                  <MiniMonthCard
+                    key={month}
+                    year={year}
+                    month={month}
+                    today={today}
+                    onSelect={onSelectMonth}
+                    style={cardStyle(year, month)}
+                  />
                 ))}
               </div>
             </div>
