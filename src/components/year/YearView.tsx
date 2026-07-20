@@ -62,6 +62,17 @@ export function YearView({ today, anchorYear, onSelectMonth, onGridView, transit
   const [siblingOffsets, setSiblingOffsets] = useState<Record<number, { dx: number; dy: number }> | null>(null);
   const measuredForRef = useRef<string | null>(null);
 
+  // Direction is derived from each card's row/column in the (uniform,
+  // 3-column) grid rather than measured via getBoundingClientRect. A forced
+  // synchronous reflow here — even just one, even for only the target card —
+  // lands in the same tick as the offset state landing on these freshly-
+  // mounted cards and, for reasons that sit below what the CSS Transitions
+  // spec pins down, makes the browser skip treating that as a real "from"
+  // frame: the transition never triggers and every card just snaps straight
+  // to rest instead of flying in. Row/column deltas give the same radial
+  // direction on this evenly-spaced grid without ever touching layout.
+  const GRID_COLUMNS = 3;
+
   useLayoutEffect(() => {
     if (!transition) {
       measuredForRef.current = null;
@@ -70,23 +81,16 @@ export function YearView({ today, anchorYear, onSelectMonth, onGridView, transit
     }
     const key = `${transition.targetYear}-${transition.targetMonth}`;
     if (measuredForRef.current === key) return;
-    const targetEl = document.querySelector<HTMLElement>(
-      `[data-cal-year-month="${transition.targetYear}-${transition.targetMonth}"]`,
-    );
-    if (!targetEl) return;
-    const targetRect = targetEl.getBoundingClientRect();
-    // Long enough that pushing any on-screen card this far along its own
-    // radial direction clears the viewport regardless of which corner it
-    // starts from.
+    const targetCol = transition.targetMonth % GRID_COLUMNS;
+    const targetRow = Math.floor(transition.targetMonth / GRID_COLUMNS);
     const travel = Math.hypot(window.innerWidth, window.innerHeight);
     const offsets: Record<number, { dx: number; dy: number }> = {};
     for (let m = 0; m < 12; m++) {
       if (m === transition.targetMonth) continue;
-      const el = document.querySelector<HTMLElement>(`[data-cal-year-month="${transition.targetYear}-${m}"]`);
-      if (!el) continue;
-      const r = el.getBoundingClientRect();
-      const vx = r.left - targetRect.left;
-      const vy = r.top - targetRect.top;
+      const col = m % GRID_COLUMNS;
+      const row = Math.floor(m / GRID_COLUMNS);
+      const vx = col - targetCol;
+      const vy = row - targetRow;
       const len = Math.hypot(vx, vy) || 1;
       offsets[m] = { dx: (vx / len) * travel, dy: (vy / len) * travel };
     }
