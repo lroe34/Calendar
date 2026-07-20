@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { useLayoutEffect, useRef, type CSSProperties } from "react";
 import { BottomBar } from "@/components/shared/BottomBar";
 import { PlusIcon, SearchIcon } from "@/components/shared/Icons";
 import { TRANSITION_MS, TRANSITION_EASE } from "@/lib/transition-constants";
@@ -59,44 +59,32 @@ export function YearView({ today, anchorYear, onSelectMonth, onGridView, transit
   // animate toward/from, so the grid reads as flying in from off-screen (or
   // out past the edges) around whichever month is being zoomed, rather than
   // just sitting static underneath the month layer.
-  const [siblingOffsets, setSiblingOffsets] = useState<Record<number, { dx: number; dy: number }> | null>(null);
-  const measuredForRef = useRef<string | null>(null);
-
-  // Direction is derived from each card's row/column in the (uniform,
-  // 3-column) grid rather than measured via getBoundingClientRect. A forced
-  // synchronous reflow here — even just one, even for only the target card —
-  // lands in the same tick as the offset state landing on these freshly-
-  // mounted cards and, for reasons that sit below what the CSS Transitions
-  // spec pins down, makes the browser skip treating that as a real "from"
-  // frame: the transition never triggers and every card just snaps straight
-  // to rest instead of flying in. Row/column deltas give the same radial
-  // direction on this evenly-spaced grid without ever touching layout.
+  //
+  // Direction comes from each card's row/column in the (uniform, 3-column)
+  // grid, computed inline instead of measured via getBoundingClientRect (and
+  // instead of a separate effect + state populated after mount). Both of
+  // those would put a card's very first painted frame at "no style yet"
+  // (or, with a measuring effect, at rest) with the "off" position only
+  // landing on a *later* commit — and for reasons that sit below what the
+  // CSS Transitions spec pins down, a forced reflow or a second cascaded
+  // commit landing that close to the following "on" commit makes the
+  // browser skip treating "off" as a real prior frame, so the transition
+  // never triggers and every card just snaps straight to rest. Computing it
+  // synchronously during render means "off" is what a card's first paint
+  // already shows, so the only style change left to animate is off -> on.
   const GRID_COLUMNS = 3;
 
-  useLayoutEffect(() => {
-    if (!transition) {
-      measuredForRef.current = null;
-      setSiblingOffsets(null);
-      return;
-    }
-    const key = `${transition.targetYear}-${transition.targetMonth}`;
-    if (measuredForRef.current === key) return;
-    const targetCol = transition.targetMonth % GRID_COLUMNS;
-    const targetRow = Math.floor(transition.targetMonth / GRID_COLUMNS);
-    const travel = Math.hypot(window.innerWidth, window.innerHeight);
-    const offsets: Record<number, { dx: number; dy: number }> = {};
-    for (let m = 0; m < 12; m++) {
-      if (m === transition.targetMonth) continue;
-      const col = m % GRID_COLUMNS;
-      const row = Math.floor(m / GRID_COLUMNS);
-      const vx = col - targetCol;
-      const vy = row - targetRow;
-      const len = Math.hypot(vx, vy) || 1;
-      offsets[m] = { dx: (vx / len) * travel, dy: (vy / len) * travel };
-    }
-    measuredForRef.current = key;
-    setSiblingOffsets(offsets);
-  }, [transition]);
+  function radialOffset(targetMonth: number, month: number): { dx: number; dy: number } {
+    const targetCol = targetMonth % GRID_COLUMNS;
+    const targetRow = Math.floor(targetMonth / GRID_COLUMNS);
+    const col = month % GRID_COLUMNS;
+    const row = Math.floor(month / GRID_COLUMNS);
+    const vx = col - targetCol;
+    const vy = row - targetRow;
+    const len = Math.hypot(vx, vy) || 1;
+    const travel = typeof window === "undefined" ? 0 : Math.hypot(window.innerWidth, window.innerHeight);
+    return { dx: (vx / len) * travel, dy: (vy / len) * travel };
+  }
 
   // "displaced": pushed out past the edge and invisible — the state both
   // directions share while the month layer on top is opaque. Mirrors
@@ -106,12 +94,22 @@ export function YearView({ today, anchorYear, onSelectMonth, onGridView, transit
   function cardStyle(year: number, month: number): CSSProperties | undefined {
     if (!transition || transition.targetYear !== year) return undefined;
     const isTarget = month === transition.targetMonth;
-    const offset = !isTarget ? siblingOffsets?.[month] : undefined;
-    if (!isTarget && !offset) return undefined;
+    const offset = !isTarget ? radialOffset(transition.targetMonth, month) : undefined;
+    // On entry, opacity ramps in over a shorter, front-loaded window than
+    // the transform (mirrors the month layer's own reveal below): fading in
+    // quickly makes the card visible well before it's finished traveling,
+    // so the rest of its trip in actually reads as motion instead of a
+    // last-instant pop once the month layer above finally clears. Exit
+    // keeps the shared curve — its cards start fully visible at rest, so
+    // there's no reveal to race ahead of.
+    const opacityTransition =
+      transition.mode === "enter"
+        ? `opacity ${Math.round(TRANSITION_MS * 0.4)}ms ease-out`
+        : `opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}`;
     return {
       transform: displaced && offset ? `translate(${offset.dx}px, ${offset.dy}px)` : "translate(0px, 0px)",
       opacity: displaced ? 0 : 1,
-      transition: `transform ${TRANSITION_MS}ms ${TRANSITION_EASE}, opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
+      transition: `transform ${TRANSITION_MS}ms ${TRANSITION_EASE}, ${opacityTransition}`,
     };
   }
 
