@@ -352,20 +352,15 @@ export function CalendarApp() {
         ...(monthCollapsed && yearTransition.smallRect
           ? { ...smallRectTransform(yearTransition.smallRect), opacity: 0 }
           : { transform: "translate(0px, 0px) scale(1)", transformOrigin: "0 0", opacity: 1 }),
-        // toYear's opacity fades out over a shorter, front-loaded window than
-        // the transform: opacity and transform sharing one slow-starting
-        // curve means the month layer stays opaque — hiding the year grid
-        // entirely — through most of the duration, so the siblings underneath
-        // have already traveled nearly all the way home by the time the
-        // reveal finally clears enough to see them. Racing the reveal ahead
-        // leaves most of the duration for their fly-in to actually be seen.
-        // toMonth doesn't need this: its cards are visible at rest from
-        // frame one (nothing to reveal), so the shared curve already gives a
-        // clearly visible departure before the cover-up catches up.
-        transition:
-          yearTransition.mode === "toYear"
-            ? `transform ${TRANSITION_MS}ms ${TRANSITION_EASE}, opacity ${Math.round(TRANSITION_MS * 0.4)}ms ease-out`
-            : `transform ${TRANSITION_MS}ms ${TRANSITION_EASE}, opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
+        // Opacity shares the transform's full duration/curve in both
+        // directions, so the shrink (toYear) and grow (toMonth) both stay
+        // visible for the whole trip instead of fading out early and
+        // finishing the scale invisibly. The year grid's own siblings reveal
+        // themselves geometrically as the month layer's footprint shrinks
+        // (and independently ramp their own opacity in — see YearView's
+        // cardStyle), so racing the month layer's fade ahead of its shrink
+        // isn't needed to make them readable.
+        transition: `transform ${TRANSITION_MS}ms ${TRANSITION_EASE}, opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
       }
     : undefined;
 
