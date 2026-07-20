@@ -119,15 +119,25 @@ export function YearView({ today, anchorYear, onSelectMonth, onGridView, transit
     if (!transition || transition.targetYear !== year) return undefined;
     const isTarget = month === transition.targetMonth;
     const offset = !isTarget ? radialOffset(transition.targetMonth, month) : undefined;
-    // On entry, opacity ramps in over a shorter, front-loaded window than
-    // the transform (mirrors the month layer's own reveal below): fading in
-    // quickly makes the card visible well before it's finished traveling,
-    // so the rest of its trip in actually reads as motion instead of a
-    // last-instant pop once the month layer above finally clears. Exit
-    // keeps the shared curve — its cards start fully visible at rest, so
-    // there's no reveal to race ahead of.
-    const opacityTransition =
-      transition.mode === "enter"
+    // The target (selected month) card's own fade is offset from its
+    // siblings' shared curve in both directions, since it's the one doing
+    // the matched-geometry crossfade with the month layer above/below it:
+    // - Entry: held back with a delay instead of front-loaded, so it stays
+    //   hidden under the still-opaque-ish month layer through most of its
+    //   scale-down and only reveals once it's nearly at rest — the reveal
+    //   arrives in sync with the shrink finishing instead of popping in
+    //   early, mid-flight, at a mismatched size.
+    // - Exit: fades out quickly instead of over the full transition, so it
+    //   clears out well before the month layer above finishes growing over
+    //   it, rather than lingering semi-visible underneath a still-small,
+    //   still-transparent layer.
+    // Siblings keep the original curves — they're just sliding in/out from
+    // offscreen, not racing a matched-geometry swap.
+    const opacityTransition = isTarget
+      ? transition.mode === "enter"
+        ? `opacity ${Math.round(TRANSITION_MS * 0.35)}ms ease-out ${Math.round(TRANSITION_MS * 0.55)}ms`
+        : `opacity ${Math.round(TRANSITION_MS * 0.35)}ms ease-out`
+      : transition.mode === "enter"
         ? `opacity ${Math.round(TRANSITION_MS * 0.4)}ms ease-out`
         : `opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}`;
     // Only known once "enter" mode has measured the card post-mount (see the
