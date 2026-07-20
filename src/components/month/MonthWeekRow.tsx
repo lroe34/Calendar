@@ -11,6 +11,22 @@ import { TRANSITION_MS, TRANSITION_MS_AFTER_EXIT, TRANSITION_EASE } from "@/lib/
 
 export type WeekTransitionPhase = "before" | "selected" | "after";
 
+/** Off-screen resting transform for a row/header at the given transition
+ *  phase. "after" rows travel fully off the bottom of the viewport (they're
+ *  not visually related to anything staying behind). "before" rows/headers
+ *  only travel as far as the flying day-numbers do — the same distance
+ *  DayView's content slides by — so they move as a group and fade out
+ *  rather than flying off the top of the screen. Falls back to the old
+ *  full-viewport travel if the distance isn't measured yet. */
+export function weekOffTransform(
+  phase: WeekTransitionPhase | null | undefined,
+  slideDistancePx: number | null | undefined,
+): string {
+  if (phase === "after") return "translateY(100vh)";
+  if (phase === "before" && slideDistancePx != null) return `translateY(-${slideDistancePx}px)`;
+  return "translateY(-100vh)";
+}
+
 interface MonthWeekRowProps {
   weekLabel: number;
   days: MonthDay[];
@@ -24,6 +40,8 @@ interface MonthWeekRowProps {
   transitionMode?: "exit" | "enter" | null;
   /** Flips true one frame after mount so the off/resting swap is observed by the browser as a transition. */
   transitionArmed?: boolean;
+  /** Vertical travel of the flying day-numbers; "before" rows slide by this same distance instead of the full viewport. */
+  slideDistancePx?: number | null;
 }
 
 export function MonthWeekRow({
@@ -36,6 +54,7 @@ export function MonthWeekRow({
   transitionPhase = null,
   transitionMode = null,
   transitionArmed = false,
+  slideDistancePx = null,
 }: MonthWeekRowProps) {
   const weekDays = days.map((d) => d.date);
   const slots = computeWeekSlots(weekDays, events);
@@ -69,8 +88,7 @@ export function MonthWeekRow({
   // Selected-week day numbers stay hidden on the row (`numberHidden`) and
   // ride the flying clones instead — the rest of the row travels with this
   // transform.
-  const offTransform =
-    transitionPhase === "after" ? "translateY(100vh)" : "translateY(-100vh)";
+  const offTransform = weekOffTransform(transitionPhase, slideDistancePx);
   const offOpacity = transitionMode === "exit" ? 0 : 1;
 
   const isOff = transitionMode === "exit" ? transitionArmed : !transitionArmed;
