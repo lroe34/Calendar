@@ -144,10 +144,22 @@ export function YearView({ today, anchorYear, onSelectMonth, onGridView, transit
         : offset
           ? `translate(${offset.dx}px, ${offset.dy}px)`
           : "translate(0px, 0px)";
+    // The target's centered/scaled-up "off" position only becomes known once
+    // smallRect is measured (a frame or more after mount), so unlike the
+    // siblings' off state it isn't there from the very first paint. Letting
+    // that arrival itself transition (from the identity fallback) would eat
+    // into the card's travel before "armed" even flips, so it's suppressed
+    // here — the card jumps straight to its off position — and the real
+    // animation only starts once "armed" switches this back on for the trip
+    // to rest.
+    const cardTransition =
+      isTarget && transition.mode === "enter" && !transition.armed
+        ? "none"
+        : `transform ${TRANSITION_MS}ms ${TRANSITION_EASE}, ${opacityTransition}`;
     return {
       transform,
       opacity: displaced ? 0 : 1,
-      transition: `transform ${TRANSITION_MS}ms ${TRANSITION_EASE}, ${opacityTransition}`,
+      transition: cardTransition,
     };
   }
 
