@@ -262,9 +262,7 @@ export function CalendarApp() {
   // commit cascade that's also applying YearView's siblings' initial "off"
   // styles makes the browser treat that "off" state as never having been a
   // real rendered frame — the fly-in transition then silently no-ops,
-  // snapping straight to rest instead of animating. The card's own
-  // transform stays translate(0,0) regardless of displaced/armed (only its
-  // opacity changes), so its layout position a frame later is unaffected.
+  // snapping straight to rest instead of animating.
   useLayoutEffect(() => {
     if (!yearTransition || yearTransition.mode !== "toYear" || yearTransition.smallRect) return;
     const raf = requestAnimationFrame(() => {
