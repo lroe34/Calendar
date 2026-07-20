@@ -395,6 +395,7 @@ export function CalendarApp() {
                     selectedWeekKey: transition.selectedWeekKey,
                     mode: transition.mode === "toDay" ? "exit" : "enter",
                     armed: transition.armed,
+                    slideDistancePx: transition.slideDistancePx,
                   }
                 : null
             }

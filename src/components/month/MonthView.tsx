@@ -7,12 +7,14 @@ import { TopNavBar } from "@/components/shared/TopNavBar";
 import { BottomBar } from "@/components/shared/BottomBar";
 import { TRANSITION_MS, TRANSITION_MS_AFTER_EXIT, TRANSITION_EASE } from "@/lib/transition-constants";
 import { MonthWeekdayHeader } from "./MonthWeekdayHeader";
-import { MonthWeekRow, type WeekTransitionPhase } from "./MonthWeekRow";
+import { MonthWeekRow, weekOffTransform, type WeekTransitionPhase } from "./MonthWeekRow";
 
 export interface MonthViewTransition {
   selectedWeekKey: string;
   mode: "exit" | "enter";
   armed: boolean;
+  /** Vertical travel of the flying day-numbers; "before" rows/headers slide by this same distance instead of the full viewport. */
+  slideDistancePx: number | null;
 }
 
 interface MonthViewProps {
@@ -177,9 +179,7 @@ export function MonthView({
           const headerStyle = transition
             ? {
                 transform: headerIsOff
-                  ? headerPhase === "after"
-                    ? "translateY(100vh)"
-                    : "translateY(-100vh)"
+                  ? weekOffTransform(headerPhase, transition.slideDistancePx)
                   : "translateY(0)",
                 // Fade out while exiting, but stay fully opaque while
                 // entering so headers don't visibly fade in as they slide.
@@ -219,6 +219,7 @@ export function MonthView({
                     transitionPhase={phase}
                     transitionMode={transition?.mode ?? null}
                     transitionArmed={transition?.armed ?? false}
+                    slideDistancePx={transition?.slideDistancePx ?? null}
                   />
                 );
               })}
