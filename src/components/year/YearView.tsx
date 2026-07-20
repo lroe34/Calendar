@@ -53,11 +53,12 @@ export function YearView({ today, anchorYear, onSelectMonth, onGridView, transit
     if (idx >= 0) scrollToIndex(idx, true);
   }
 
-  // Per-card pixel offset that lands each of the target month's 11 siblings
-  // exactly on top of it — the shared "collapsed" endpoint both directions
-  // animate toward/from, so the grid reads as bursting out of (or gathering
-  // into) whichever month is being zoomed, rather than just sitting static
-  // underneath the month layer.
+  // Per-card pixel offset that pushes each of the target month's 11 siblings
+  // further out past the viewport edge, along the line from the target card
+  // through that sibling — the shared "displaced" endpoint both directions
+  // animate toward/from, so the grid reads as flying in from off-screen (or
+  // out past the edges) around whichever month is being zoomed, rather than
+  // just sitting static underneath the month layer.
   const [siblingOffsets, setSiblingOffsets] = useState<Record<number, { dx: number; dy: number }> | null>(null);
   const measuredForRef = useRef<string | null>(null);
 
@@ -74,22 +75,29 @@ export function YearView({ today, anchorYear, onSelectMonth, onGridView, transit
     );
     if (!targetEl) return;
     const targetRect = targetEl.getBoundingClientRect();
+    // Long enough that pushing any on-screen card this far along its own
+    // radial direction clears the viewport regardless of which corner it
+    // starts from.
+    const travel = Math.hypot(window.innerWidth, window.innerHeight);
     const offsets: Record<number, { dx: number; dy: number }> = {};
     for (let m = 0; m < 12; m++) {
       if (m === transition.targetMonth) continue;
       const el = document.querySelector<HTMLElement>(`[data-cal-year-month="${transition.targetYear}-${m}"]`);
       if (!el) continue;
       const r = el.getBoundingClientRect();
-      offsets[m] = { dx: targetRect.left - r.left, dy: targetRect.top - r.top };
+      const vx = r.left - targetRect.left;
+      const vy = r.top - targetRect.top;
+      const len = Math.hypot(vx, vy) || 1;
+      offsets[m] = { dx: (vx / len) * travel, dy: (vy / len) * travel };
     }
     measuredForRef.current = key;
     setSiblingOffsets(offsets);
   }, [transition]);
 
-  // "collapsed": gathered onto the target card and invisible — the state
-  // both directions share while the month layer on top is opaque. Mirrors
+  // "displaced": pushed out past the edge and invisible — the state both
+  // directions share while the month layer on top is opaque. Mirrors
   // MonthWeekRow's exit/enter off-state convention.
-  const collapsed = transition ? (transition.mode === "exit" ? transition.armed : !transition.armed) : false;
+  const displaced = transition ? (transition.mode === "exit" ? transition.armed : !transition.armed) : false;
 
   function cardStyle(year: number, month: number): CSSProperties | undefined {
     if (!transition || transition.targetYear !== year) return undefined;
@@ -97,8 +105,8 @@ export function YearView({ today, anchorYear, onSelectMonth, onGridView, transit
     const offset = !isTarget ? siblingOffsets?.[month] : undefined;
     if (!isTarget && !offset) return undefined;
     return {
-      transform: collapsed && offset ? `translate(${offset.dx}px, ${offset.dy}px)` : "translate(0px, 0px)",
-      opacity: collapsed ? 0 : 1,
+      transform: displaced && offset ? `translate(${offset.dx}px, ${offset.dy}px)` : "translate(0px, 0px)",
+      opacity: displaced ? 0 : 1,
       transition: `transform ${TRANSITION_MS}ms ${TRANSITION_EASE}, opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
     };
   }
