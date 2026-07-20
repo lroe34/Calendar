@@ -256,15 +256,27 @@ export function CalendarApp() {
   // mounted (and scrolled to its anchor year, which happens synchronously in
   // its own layout effect first). toMonth already has its rect measured
   // synchronously at tap time, so this is a no-op for that direction.
+  //
+  // Deferred a frame rather than measured synchronously here: a forced
+  // reflow (which getBoundingClientRect triggers) landing in the same
+  // commit cascade that's also applying YearView's siblings' initial "off"
+  // styles makes the browser treat that "off" state as never having been a
+  // real rendered frame — the fly-in transition then silently no-ops,
+  // snapping straight to rest instead of animating. The card's own
+  // transform stays translate(0,0) regardless of displaced/armed (only its
+  // opacity changes), so its layout position a frame later is unaffected.
   useLayoutEffect(() => {
     if (!yearTransition || yearTransition.mode !== "toYear" || yearTransition.smallRect) return;
-    const el = document.querySelector<HTMLElement>(
-      `[data-cal-year-month="${yearTransition.year}-${yearTransition.month}"]`,
-    );
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    const smallRect: FlyingRect = { left: r.left, top: r.top, width: r.width, height: r.height };
-    setYearTransition((t) => (t && !t.smallRect ? { ...t, smallRect } : t));
+    const raf = requestAnimationFrame(() => {
+      const el = document.querySelector<HTMLElement>(
+        `[data-cal-year-month="${yearTransition.year}-${yearTransition.month}"]`,
+      );
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const smallRect: FlyingRect = { left: r.left, top: r.top, width: r.width, height: r.height };
+      setYearTransition((t) => (t && !t.smallRect ? { ...t, smallRect } : t));
+    });
+    return () => cancelAnimationFrame(raf);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [yearTransition?.mode === "toYear" && !yearTransition.smallRect]);
 
