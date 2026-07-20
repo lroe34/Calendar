@@ -418,6 +418,7 @@ export function CalendarApp() {
                     targetYear: yearTransition.year,
                     targetMonth: yearTransition.month,
                     armed: yearTransition.armed,
+                    smallRect: yearTransition.smallRect,
                   }
                 : null
             }

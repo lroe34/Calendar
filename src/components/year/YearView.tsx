@@ -4,6 +4,7 @@ import { useLayoutEffect, useRef, type CSSProperties } from "react";
 import { BottomBar } from "@/components/shared/BottomBar";
 import { PlusIcon, SearchIcon } from "@/components/shared/Icons";
 import { TRANSITION_MS, TRANSITION_EASE } from "@/lib/transition-constants";
+import type { FlyingRect } from "@/components/transitions/FlyingDayNumbers";
 import { MiniMonthCard } from "./MiniMonthCard";
 
 export interface YearViewTransition {
@@ -13,6 +14,8 @@ export interface YearViewTransition {
   targetMonth: number;
   /** Flips true one frame after mount so the off/resting swap is observed by the browser as a transition. */
   armed: boolean;
+  /** The target card's own measured rect, used to aim its scale-up-toward-center motion. Null only for the brief window before "enter" mode has measured it. */
+  smallRect: FlyingRect | null;
 }
 
 interface YearViewProps {
@@ -86,6 +89,21 @@ export function YearView({ today, anchorYear, onSelectMonth, onGridView, transit
     return { dx: (vx / len) * travel, dy: (vy / len) * travel };
   }
 
+  // How far the target card itself travels toward the viewport's center as it
+  // scales up and fades — its half of the crossfade with the month layer
+  // growing from that same rect, so the swap reads as one card launching
+  // toward the viewer rather than a flat opacity dissolve in place.
+  const TARGET_SCALE = 1.6;
+
+  function targetCenterOffset(rect: FlyingRect): { dx: number; dy: number } {
+    const rectCenterX = rect.left + rect.width / 2;
+    const rectCenterY = rect.top + rect.height / 2;
+    return {
+      dx: window.innerWidth / 2 - rectCenterX,
+      dy: window.innerHeight / 2 - rectCenterY,
+    };
+  }
+
   // "displaced": pushed out past the edge and invisible — the state both
   // directions share while the month layer on top is opaque. Mirrors
   // MonthWeekRow's exit/enter off-state convention.
@@ -106,8 +124,22 @@ export function YearView({ today, anchorYear, onSelectMonth, onGridView, transit
       transition.mode === "enter"
         ? `opacity ${Math.round(TRANSITION_MS * 0.4)}ms ease-out`
         : `opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}`;
+    // Only known once "enter" mode has measured the card post-mount (see the
+    // smallRect effect in CalendarApp); until then the target briefly falls
+    // back to the plain in-place fade below, same as before this rect existed.
+    const targetOffset =
+      isTarget && transition.smallRect ? targetCenterOffset(transition.smallRect) : null;
+    const transform = !displaced
+      ? "translate(0px, 0px) scale(1)"
+      : isTarget
+        ? targetOffset
+          ? `translate(${targetOffset.dx}px, ${targetOffset.dy}px) scale(${TARGET_SCALE})`
+          : "translate(0px, 0px) scale(1)"
+        : offset
+          ? `translate(${offset.dx}px, ${offset.dy}px)`
+          : "translate(0px, 0px)";
     return {
-      transform: displaced && offset ? `translate(${offset.dx}px, ${offset.dy}px)` : "translate(0px, 0px)",
+      transform,
       opacity: displaced ? 0 : 1,
       transition: `transform ${TRANSITION_MS}ms ${TRANSITION_EASE}, ${opacityTransition}`,
     };
