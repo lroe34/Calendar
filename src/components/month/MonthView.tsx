@@ -181,9 +181,10 @@ export function MonthView({
                 transform: headerIsOff
                   ? weekOffTransform(headerPhase, transition.slideDistancePx)
                   : "translateY(0)",
-                // Fade out while exiting, but stay fully opaque while
-                // entering so headers don't visibly fade in as they slide.
-                opacity: headerIsOff && transition.mode === "exit" ? 0 : 1,
+                // Fade out while exiting; while entering, "before" headers
+                // fade in alongside their slide (they were covered by day
+                // view), other phases stay fully opaque.
+                opacity: headerIsOff && (transition.mode === "exit" || headerPhase === "before") ? 0 : 1,
                 // Match MonthWeekRow: "after" headers ride above the day
                 // layer / earlier weeks while they travel.
                 zIndex: headerPhase === "after" ? 30 : undefined,

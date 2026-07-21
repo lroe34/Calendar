@@ -86,9 +86,10 @@ export function MonthWeekRow({
   );
 
   // Off-screen resting state for each phase. "before"/"selected" rows slide
-  // up; "after" rows slide down. Exit still fades via CSS; enter stays
-  // opaque and is driven by WAAPI (same paint-race fix as DayView) so a
-  // fresh MonthView mount can't skip the slide and teleport into place.
+  // up; "after" rows slide down. Exit fades via CSS; enter is driven by
+  // WAAPI (same paint-race fix as DayView) so a fresh MonthView mount can't
+  // skip the slide and teleport into place — "before" rows also fade in
+  // alongside the slide, since day view had already covered them.
   // Selected-week day numbers stay hidden on the row (`numberHidden`) and
   // ride the flying clones instead — the rest of the row travels with this
   // transform.
@@ -113,7 +114,7 @@ export function MonthWeekRow({
 
     const anim = el.animate(
       [
-        { transform: offTransform, opacity: 1 },
+        { transform: offTransform, opacity: transitionPhase === "before" ? 0 : 1 },
         { transform: "translateY(0px)", opacity: 1 },
       ],
       { duration: durationMs, easing: TRANSITION_EASE },
@@ -140,7 +141,7 @@ export function MonthWeekRow({
       // WAAPI cancel(), the element must not snap back to the off position.
       rowStyle = {
         transform: isEnterAwaitingAnimation ? offTransform : undefined,
-        opacity: 1,
+        opacity: isEnterAwaitingAnimation && transitionPhase === "before" ? 0 : 1,
         transition: "none",
         zIndex: transitionPhase === "after" ? 30 : undefined,
       };
