@@ -152,11 +152,15 @@ function LiquidChips({
           items={items}
           theme={theme}
           radius={28}
-          gap={16}
-          blur={11}
-          contrast={20}
-          threshold={8}
-          width={620}
+          // Wide rest gap keeps settled chips as separate pills; the extra
+          // swell + the travel of a growing/melting chip still bridges the goo
+          // mid-transition.
+          gap={40}
+          blur={10}
+          contrast={22}
+          threshold={9}
+          swell={0.26}
+          width={760}
           height={150}
           showOutlines={showOutlines}
           className="w-full touch-none select-none rounded-2xl"
