@@ -177,6 +177,12 @@ function MitosisButton({
   const leftX = CX - sep / 2;
   const rightX = CX + sep / 2;
 
+  // Swell the cells mid-flight: a bump that's 0 at rest (t=0 and t=1) and
+  // peaks around the pinch/merge point, so the buttons scale up while the
+  // split or join is in motion, then settle back to their resting radius.
+  const bump = Math.sin(Math.PI * clamp01(t));
+  const Rr = R * (1 + 0.2 * bump);
+
   // Cross-fade the parent's "+" out as the daughters' icons fade in.
   const plusOpacity = clamp01(1 - t * 2.2);
   const optionOpacity = clamp01((t - 0.45) / 0.55);
@@ -246,25 +252,25 @@ function MitosisButton({
 
           {/* The gooey body: two equal circles fused by the filter. */}
           <g filter={`url(#${gooId})`}>
-            <circle cx={leftX} cy={CY} r={R} fill={`url(#${gradId})`} />
-            <circle cx={rightX} cy={CY} r={R} fill={`url(#${gradId})`} />
+            <circle cx={leftX} cy={CY} r={Rr} fill={`url(#${gradId})`} />
+            <circle cx={rightX} cy={CY} r={Rr} fill={`url(#${gradId})`} />
           </g>
 
           {/* Crisp glass sheen, drawn on top so the blur doesn't smear it. */}
           <g pointerEvents="none">
             <ellipse
               cx={leftX}
-              cy={CY - R * 0.42}
-              rx={R * 0.52}
-              ry={R * 0.3}
+              cy={CY - Rr * 0.42}
+              rx={Rr * 0.52}
+              ry={Rr * 0.3}
               fill={`url(#${sheenId})`}
               opacity={0.55}
             />
             <ellipse
               cx={rightX}
-              cy={CY - R * 0.42}
-              rx={R * 0.52}
-              ry={R * 0.3}
+              cy={CY - Rr * 0.42}
+              rx={Rr * 0.52}
+              ry={Rr * 0.3}
               fill={`url(#${sheenId})`}
               opacity={0.55}
             />
@@ -295,7 +301,7 @@ function MitosisButton({
             {/* Labels under the daughters. */}
             <text
               x={leftX}
-              y={CY + R + 26}
+              y={CY + Rr + 26}
               textAnchor="middle"
               fill="#ffffff"
               opacity={optionOpacity * 0.75}
@@ -306,7 +312,7 @@ function MitosisButton({
             </text>
             <text
               x={rightX}
-              y={CY + R + 26}
+              y={CY + Rr + 26}
               textAnchor="middle"
               fill="#ffffff"
               opacity={optionOpacity * 0.75}
@@ -320,8 +326,8 @@ function MitosisButton({
           {/* True geometry overlay for debugging the pinch point. */}
           {showOutlines && (
             <g fill="none" stroke={theme.glow} strokeOpacity={0.6} strokeDasharray="4 4">
-              <circle cx={leftX} cy={CY} r={R} />
-              <circle cx={rightX} cy={CY} r={R} />
+              <circle cx={leftX} cy={CY} r={Rr} />
+              <circle cx={rightX} cy={CY} r={Rr} />
             </g>
           )}
 
@@ -331,7 +337,7 @@ function MitosisButton({
               <circle
                 cx={leftX}
                 cy={CY}
-                r={R}
+                r={Rr}
                 fill="transparent"
                 style={{ cursor: "pointer" }}
                 onPointerDown={(e) => {
@@ -342,7 +348,7 @@ function MitosisButton({
               <circle
                 cx={rightX}
                 cy={CY}
-                r={R}
+                r={Rr}
                 fill="transparent"
                 style={{ cursor: "pointer" }}
                 onPointerDown={(e) => {
@@ -355,7 +361,7 @@ function MitosisButton({
             <circle
               cx={CX}
               cy={CY}
-              r={R}
+              r={Rr}
               fill="transparent"
               style={{ cursor: "pointer" }}
               onPointerDown={(e) => {
