@@ -224,43 +224,59 @@ function MitosisButton({
   const [split, setSplit] = useState(false);
 
   const items = useMemo<LiquidItem[]>(() => {
-    // The right-hand pill is identical in both states, so it persists.
-    const tools: LiquidItem = {
-      id: "tools",
-      width: 150,
-      icon: () => (
-        <g>
-          <g transform="translate(-30, 0)">
-            <SearchIcon />
-          </g>
-          <g transform="translate(30, 0)">
-            <ToolbarPlusIcon />
-          </g>
-        </g>
-      ),
-      onClick: () => setSplit((s) => !s),
-    };
-
     if (!split) {
-      // Three icons fused into one bar: list-circle hugging the tools pill.
+      // Collapsed: a *single* pill holding all three icons. Rendering it as one
+      // blob — instead of a list-circle fused to the tools pill — keeps the
+      // gradient continuous. Two overlapping blobs each map the objectBoundingBox
+      // gradient to their own box, so the goo bridge between them shows a seam
+      // that distorts the bar at rest. One rect, one gradient, no seam.
       return [
         {
-          id: "list",
-          icon: () => <SidebarIcon />,
+          id: "tools",
+          width: 200,
+          icon: () => (
+            <g>
+              <g transform="translate(-60, 0)">
+                <SidebarIcon />
+              </g>
+              <g transform="translate(0, 0)">
+                <SearchIcon />
+              </g>
+              <g transform="translate(60, 0)">
+                <ToolbarPlusIcon />
+              </g>
+            </g>
+          ),
           onClick: () => setSplit(true),
         },
-        tools,
       ];
     }
 
-    // The bud has separated: its own circle, then the tools pill.
+    // Split: the menu circle buds off the left while the tools pill (search +
+    // plus) narrows and slides right. `tools` keeps its id across both states,
+    // so it resizes/repositions smoothly rather than popping — the goo bridges
+    // the gap only *during* the transition, which is exactly when we want it.
     return [
       {
         id: "menu",
         icon: () => <StackIcon />,
         onClick: () => setSplit(false),
       },
-      tools,
+      {
+        id: "tools",
+        width: 150,
+        icon: () => (
+          <g>
+            <g transform="translate(-30, 0)">
+              <SearchIcon />
+            </g>
+            <g transform="translate(30, 0)">
+              <ToolbarPlusIcon />
+            </g>
+          </g>
+        ),
+        onClick: () => setSplit((s) => !s),
+      },
     ];
   }, [split]);
 
@@ -277,10 +293,9 @@ function MitosisButton({
           items={items}
           theme={theme}
           radius={40}
-          // Overlap the pair while merged so they fuse into one seamless bar
-          // (no pinched waist); pull them wide apart once split so the bud
-          // clears the pill.
-          gap={split ? 44 : -26}
+          // Collapsed is a single blob, so gap is moot there; once split, pull
+          // the bud and the pill wide apart so the goo bridge pinches cleanly.
+          gap={44}
           blur={blur}
           contrast={contrast}
           threshold={threshold}
