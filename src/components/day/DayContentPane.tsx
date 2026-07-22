@@ -33,6 +33,9 @@ interface DayContentPaneProps {
   /** Height of the pinned chrome (nav spacer + mini week strip) this pane sits below. */
   topOffset: number;
   verticalTransition?: DayPaneVerticalTransition | null;
+  /** While an on-grid edit is live, lock this pane's vertical scroll so a drag
+   *  retimes the event instead of scrolling the grid underneath the pinned copy. */
+  scrollLocked?: boolean;
 }
 
 export function DayContentPane({
@@ -47,6 +50,7 @@ export function DayContentPane({
   onEventLongPress,
   topOffset,
   verticalTransition = null,
+  scrollLocked = false,
 }: DayContentPaneProps) {
   const isToday = isSameDay(date, today);
 
@@ -225,7 +229,14 @@ export function DayContentPane({
       <div
         ref={scrollRef}
         className="no-scrollbar pointer-events-auto absolute inset-0 overflow-y-auto pb-28 mt-3"
-        style={{ ...contentStyle, paddingTop: topOffset + subHeaderHeight }}
+        style={{
+          ...contentStyle,
+          paddingTop: topOffset + subHeaderHeight,
+          // Locked during an on-grid edit so the drag can't native-scroll the
+          // grid out from under the pinned copy (touch-action alone can't stop
+          // a scroll the browser already latched at touchstart).
+          ...(scrollLocked ? { overflowY: "hidden" as const, touchAction: "none" as const } : null),
+        }}
       >
         <HourGrid
           events={timedEvents}

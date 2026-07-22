@@ -730,6 +730,7 @@ export function DayView({
             ghost={baseGhost}
             onEventLongPress={handleEnterEdit}
             topOffset={headerHeight}
+            scrollLocked={!!edit}
             verticalTransition={
               transition
                 ? {
@@ -755,6 +756,7 @@ export function DayView({
               ghost={neighborGhost}
               onEventLongPress={handleEnterEdit}
               topOffset={headerHeight}
+              scrollLocked={!!edit}
               verticalTransition={null}
             />
           </div>
