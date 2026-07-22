@@ -36,6 +36,10 @@ interface DayContentPaneProps {
   /** While an on-grid edit is live, lock this pane's vertical scroll so a drag
    *  retimes the event instead of scrolling the grid underneath the pinned copy. */
   scrollLocked?: boolean;
+  /** DayView owns the on-grid edit gesture but needs this pane's scroll element
+   *  to read/drive it — bounding the pinned copy to the visible grid and
+   *  edge-auto-scrolling. Only the base (selected-day) pane forwards it. */
+  scrollContainerRef?: React.MutableRefObject<HTMLDivElement | null>;
 }
 
 export function DayContentPane({
@@ -51,6 +55,7 @@ export function DayContentPane({
   topOffset,
   verticalTransition = null,
   scrollLocked = false,
+  scrollContainerRef,
 }: DayContentPaneProps) {
   const isToday = isSameDay(date, today);
 
@@ -76,6 +81,13 @@ export function DayContentPane({
   );
 
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Assign the scroll element to both the internal ref (used by this pane's own
+  // layout effects) and the ref DayView passes down for its on-grid edit.
+  const setScrollRef = (el: HTMLDivElement | null) => {
+    scrollRef.current = el;
+    if (scrollContainerRef) scrollContainerRef.current = el;
+  };
 
   useLayoutEffect(() => {
     const container = scrollRef.current;
@@ -227,7 +239,7 @@ export function DayContentPane({
   return (
     <div className="absolute inset-0 overflow-hidden">
       <div
-        ref={scrollRef}
+        ref={setScrollRef}
         className="no-scrollbar pointer-events-auto absolute inset-0 overflow-y-auto pb-28 mt-3"
         style={{
           ...contentStyle,

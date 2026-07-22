@@ -109,6 +109,18 @@ const PANE_LAYER_STYLE: CSSProperties = {
   backfaceVisibility: "hidden",
 };
 
+// While dragging an event, the pinned copy is held inside the visible hour grid
+// (never over the pinned chrome). Pushing its active edge into the top/bottom
+// EDGE band instead scrolls the grid — slowly near the edge, faster the deeper
+// the push — so hours off-screen can be reached without the block leaving view.
+const AUTOSCROLL_EDGE_PX = 64;
+const AUTOSCROLL_MAX_PX_PER_S = 460;
+
+function edgeAutoScrollSpeed(depthPx: number): number {
+  const d = clamp(depthPx, 0, AUTOSCROLL_EDGE_PX) / AUTOSCROLL_EDGE_PX;
+  return d * AUTOSCROLL_MAX_PX_PER_S;
+}
+
 /** Damped mass-spring integrated with semi-implicit Euler, ticked on rAF.
  *  Returns a cancel function. Velocity is continuous across calls (callers
  *  pass the real release velocity), which is what makes a re-grabbed or
@@ -202,6 +214,11 @@ interface EditSession {
   anchorTop: number;
   anchorLeft: number;
   anchorWidth: number;
+  /** How far the grid has been auto-scrolled since this gesture's anchor was
+   *  set (currentScrollTop − anchorScrollTop). The pinned copy stays glued to
+   *  the grid by offsetting its top by this, so it tracks the times sliding
+   *  under it during an edge auto-scroll. Reset to 0 when the anchor is reset. */
+  scrollOffsetPx: number;
 }
 
 interface EditGesture {
@@ -211,10 +228,37 @@ interface EditGesture {
   origEndMin: number;
   curStartMin: number;
   curEndMin: number;
+  /** Grid scrollTop when this gesture began — drag deltas fold in scroll since. */
+  anchorScrollTop: number;
 }
 
 function overlayTopPx(edit: EditSession): number {
-  return edit.anchorTop + minutesToPx(edit.startMin - edit.origStartMin);
+  return edit.anchorTop + minutesToPx(edit.startMin - edit.origStartMin) - edit.scrollOffsetPx;
+}
+
+/** Content-space (only day-bounds) start/end for a gesture at a given minute
+ *  delta, before the visible-grid clamp is applied. */
+function editTimesForDelta(
+  kind: EditGesture["kind"],
+  origStartMin: number,
+  origEndMin: number,
+  deltaMin: number,
+): { startMin: number; endMin: number } {
+  const duration = origEndMin - origStartMin;
+  if (kind === "move") {
+    const startMin = clamp(origStartMin + deltaMin, 0, MINUTES_IN_DAY - duration);
+    return { startMin, endMin: startMin + duration };
+  }
+  if (kind === "resize-start") {
+    return {
+      startMin: clamp(origStartMin + deltaMin, 0, origEndMin - MIN_EVENT_DURATION_MIN),
+      endMin: origEndMin,
+    };
+  }
+  return {
+    startMin: origStartMin,
+    endMin: clamp(origEndMin + deltaMin, origStartMin + MIN_EVENT_DURATION_MIN, MINUTES_IN_DAY),
+  };
 }
 
 function overlayHeightPx(edit: EditSession): number {
@@ -282,6 +326,31 @@ export function DayView({
   const [edit, setEdit] = useState<EditSession | null>(null);
   const editPointerRef = useRef<number | null>(null);
   const editGestureRef = useRef<EditGesture | null>(null);
+  // The base (selected-day) pane's scroll element — driven directly while
+  // dragging an event to reach off-screen hours.
+  const baseScrollRef = useRef<HTMLDivElement | null>(null);
+  // Height of the floating bottom bar, so the drag's lower bound stops above it
+  // rather than letting the block slide behind the buttons.
+  const bottomBarRef = useRef<HTMLDivElement | null>(null);
+  const bottomInsetRef = useRef(0);
+  // Edge auto-scroll: a rAF loop that keeps scrolling (and retiming the event)
+  // while the drag's active edge sits in the top/bottom band, even if the
+  // finger holds still.
+  const autoScrollRafRef = useRef<number | null>(null);
+  const autoScrollVelRef = useRef(0);
+  const lastEditPointerYRef = useRef(0);
+
+  useEffect(() => {
+    const el = bottomBarRef.current;
+    if (!el) return;
+    const measure = () => (bottomInsetRef.current = el.getBoundingClientRect().height);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => () => stopEditAutoScroll(), []);
 
   // The browser latches a touch's scroll intent at touchstart from the
   // then-current touch-action (pan-y). By the time the long-press fires and we
@@ -316,29 +385,119 @@ export function DayView({
     }
   }
 
-  function applyEditDrag(g: EditGesture, deltaMin: number) {
-    const duration = g.origEndMin - g.origStartMin;
-    let startMin = g.origStartMin;
-    let endMin = g.origEndMin;
-    if (g.kind === "move") {
-      startMin = clamp(g.origStartMin + deltaMin, 0, MINUTES_IN_DAY - duration);
-      endMin = startMin + duration;
-    } else if (g.kind === "resize-start") {
-      startMin = clamp(g.origStartMin + deltaMin, 0, g.origEndMin - MIN_EVENT_DURATION_MIN);
-      endMin = g.origEndMin;
+  /** The visible hour-grid band in viewport coordinates, plus the current
+   *  scroll position — the frame the drag is bounded to and auto-scrolls. */
+  function getEditBand() {
+    const el = baseScrollRef.current;
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    const padTop = parseFloat(getComputedStyle(el).paddingTop) || 0;
+    // Top of the visible grid content (just below the pinned chrome + sub-header);
+    // the bottom bar floats over the lower edge, so hold clear of it.
+    const gridTop = rect.top + padTop;
+    const bandBottom = rect.bottom - bottomInsetRef.current;
+    return {
+      el,
+      gridTop,
+      bandBottom,
+      scrollTop: el.scrollTop,
+      maxScroll: Math.max(0, el.scrollHeight - el.clientHeight),
+    };
+  }
+
+  /** Single source of truth for a drag frame: derive the event's time from the
+   *  finger + how far the grid has scrolled since pickup, bound the pinned copy
+   *  to the visible band, and arm/disarm edge auto-scroll. Re-run every pointer
+   *  move and every auto-scroll tick (with the last finger position). */
+  function applyEditPointer(pointerY: number) {
+    const g = editGestureRef.current;
+    if (!g) return;
+    lastEditPointerYRef.current = pointerY;
+
+    const band = getEditBand();
+    const scrollTop = band ? band.scrollTop : g.anchorScrollTop;
+    const scrollDelta = scrollTop - g.anchorScrollTop;
+    // Grid movement under a still finger retimes the event exactly as finger
+    // movement would, so fold scroll-since-pickup into the same delta.
+    const deltaMin = snapMinutes(pxToMinutes(pointerY - g.startClientY + scrollDelta));
+    let { startMin, endMin } = editTimesForDelta(g.kind, g.origStartMin, g.origEndMin, deltaMin);
+
+    if (band) {
+      // Where the finger-derived edges land in the viewport right now.
+      const rawTop = band.gridTop + minutesToPx(startMin) - scrollTop;
+      const rawBottom = band.gridTop + minutesToPx(endMin) - scrollTop;
+      let vel = 0;
+      if (rawTop < band.gridTop && scrollTop > 0) {
+        vel = -edgeAutoScrollSpeed(band.gridTop - rawTop);
+      } else if (rawBottom > band.bandBottom && scrollTop < band.maxScroll) {
+        vel = edgeAutoScrollSpeed(rawBottom - band.bandBottom);
+      }
+      setEditAutoScroll(vel);
+
+      // Clamp times so the pinned copy can't cross the band edges: the top edge
+      // no earlier than the time at the top of the visible grid, the bottom no
+      // later than the time at its bottom.
+      const topMin = pxToMinutes(scrollTop);
+      const botMin = pxToMinutes(scrollTop + (band.bandBottom - band.gridTop));
+      if (g.kind === "move") {
+        const duration = g.origEndMin - g.origStartMin;
+        startMin = clamp(startMin, topMin, Math.max(topMin, botMin - duration));
+        endMin = startMin + duration;
+      } else if (g.kind === "resize-start") {
+        startMin = clamp(startMin, topMin, endMin - MIN_EVENT_DURATION_MIN);
+      } else {
+        endMin = clamp(endMin, startMin + MIN_EVENT_DURATION_MIN, botMin);
+      }
     } else {
-      startMin = g.origStartMin;
-      endMin = clamp(g.origEndMin + deltaMin, g.origStartMin + MIN_EVENT_DURATION_MIN, MINUTES_IN_DAY);
+      setEditAutoScroll(0);
     }
+
     g.curStartMin = startMin;
     g.curEndMin = endMin;
-    setEdit((prev) => (prev ? { ...prev, startMin, endMin, dragging: true } : prev));
+    setEdit((prev) => (prev ? { ...prev, startMin, endMin, dragging: true, scrollOffsetPx: scrollDelta } : prev));
+  }
+
+  function setEditAutoScroll(vel: number) {
+    autoScrollVelRef.current = vel;
+    if (vel !== 0 && autoScrollRafRef.current === null) {
+      let last = performance.now();
+      const tick = (t: number) => {
+        const el = baseScrollRef.current;
+        if (autoScrollVelRef.current === 0 || !el || !editGestureRef.current) {
+          autoScrollRafRef.current = null;
+          return;
+        }
+        const dt = Math.min((t - last) / 1000, 1 / 30);
+        last = t;
+        const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight);
+        const next = clamp(el.scrollTop + autoScrollVelRef.current * dt, 0, maxScroll);
+        if (next !== el.scrollTop) el.scrollTop = next;
+        // Scroll changed → the event's time and the pinned copy's position both
+        // move; re-derive from the (unchanged) finger position.
+        applyEditPointer(lastEditPointerYRef.current);
+        if (autoScrollVelRef.current === 0) {
+          autoScrollRafRef.current = null;
+          return;
+        }
+        autoScrollRafRef.current = requestAnimationFrame(tick);
+      };
+      autoScrollRafRef.current = requestAnimationFrame(tick);
+    }
+  }
+
+  function stopEditAutoScroll() {
+    autoScrollVelRef.current = 0;
+    if (autoScrollRafRef.current !== null) {
+      cancelAnimationFrame(autoScrollRafRef.current);
+      autoScrollRafRef.current = null;
+    }
   }
 
   // Long-press on an event (reported up from HourGrid) → pick it up.
   function handleEnterEdit(info: EventLongPressInfo) {
     if (transition) return;
     editPointerRef.current = info.pointerId;
+    lastEditPointerYRef.current = info.clientY;
     editGestureRef.current = {
       kind: "move",
       startClientY: info.clientY,
@@ -346,6 +505,7 @@ export function DayView({
       origEndMin: info.origEndMin,
       curStartMin: info.origStartMin,
       curEndMin: info.origEndMin,
+      anchorScrollTop: baseScrollRef.current?.scrollTop ?? 0,
     };
     // The same finger's initial press may have armed a swipe drag — drop it.
     if (dragRef.current?.pointerId === info.pointerId) dragRef.current = null;
@@ -363,6 +523,7 @@ export function DayView({
       anchorTop: info.rect.top,
       anchorLeft: info.rect.left,
       anchorWidth: info.rect.width,
+      scrollOffsetPx: 0,
     });
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(8);
   }
@@ -374,6 +535,7 @@ export function DayView({
     if (editPointerRef.current !== null) return; // a finger is already dragging; let it bubble (swipe)
     e.stopPropagation();
     const top = overlayTopPx(edit);
+    lastEditPointerYRef.current = e.clientY;
     editGestureRef.current = {
       kind: "move",
       startClientY: e.clientY,
@@ -381,11 +543,12 @@ export function DayView({
       origEndMin: edit.endMin,
       curStartMin: edit.startMin,
       curEndMin: edit.endMin,
+      anchorScrollTop: baseScrollRef.current?.scrollTop ?? 0,
     };
     editPointerRef.current = e.pointerId;
     setEdit((prev) =>
       prev
-        ? { ...prev, dragging: true, activeEdge: "start", origStartMin: prev.startMin, origEndMin: prev.endMin, anchorTop: top }
+        ? { ...prev, dragging: true, activeEdge: "start", origStartMin: prev.startMin, origEndMin: prev.endMin, anchorTop: top, scrollOffsetPx: 0 }
         : prev,
     );
     captureEditPointer(e.pointerId);
@@ -397,6 +560,7 @@ export function DayView({
     if (editPointerRef.current !== null) return;
     e.stopPropagation();
     const top = overlayTopPx(edit);
+    lastEditPointerYRef.current = e.clientY;
     editGestureRef.current = {
       kind: edge === "start" ? "resize-start" : "resize-end",
       startClientY: e.clientY,
@@ -404,6 +568,7 @@ export function DayView({
       origEndMin: edit.endMin,
       curStartMin: edit.startMin,
       curEndMin: edit.endMin,
+      anchorScrollTop: baseScrollRef.current?.scrollTop ?? 0,
     };
     editPointerRef.current = e.pointerId;
     setEdit((prev) =>
@@ -415,6 +580,7 @@ export function DayView({
             origStartMin: prev.startMin,
             origEndMin: prev.endMin,
             anchorTop: top,
+            scrollOffsetPx: 0,
           }
         : prev,
     );
@@ -422,15 +588,14 @@ export function DayView({
   }
 
   function handleEditMove(e: ReactPointerEvent) {
-    const g = editGestureRef.current;
-    if (!g) return;
-    applyEditDrag(g, snapMinutes(pxToMinutes(e.clientY - g.startClientY)));
+    applyEditPointer(e.clientY);
   }
 
   function commitEdit(e: ReactPointerEvent) {
     const g = editGestureRef.current;
     editGestureRef.current = null;
     editPointerRef.current = null;
+    stopEditAutoScroll();
     releaseEditPointer(e.pointerId);
     if (!g || !edit) return;
     const { curStartMin: startMin, curEndMin: endMin } = g;
@@ -446,7 +611,10 @@ export function DayView({
             origEndMin: endMin,
             startMin,
             endMin,
+            // Re-anchor at the copy's current on-screen position, folding the
+            // auto-scroll offset in so the next gesture starts from a clean slate.
             anchorTop: overlayTopPx(prev),
+            scrollOffsetPx: 0,
           }
         : prev,
     );
@@ -461,7 +629,10 @@ export function DayView({
   function cancelEdit(e: ReactPointerEvent) {
     editGestureRef.current = null;
     editPointerRef.current = null;
+    stopEditAutoScroll();
     releaseEditPointer(e.pointerId);
+    // Revert to the original time. The copy stays glued to the grid (which may
+    // have auto-scrolled), so keep the live scroll offset rather than zeroing it.
     setEdit((prev) =>
       prev ? { ...prev, startMin: prev.origStartMin, endMin: prev.origEndMin, dragging: false } : prev,
     );
@@ -711,7 +882,7 @@ export function DayView({
           {
             min: editTickMin,
             label: `:${editTickMin % 60}`,
-            y: edit.anchorTop + minutesToPx(editTickMin - edit.origStartMin),
+            y: edit.anchorTop + minutesToPx(editTickMin - edit.origStartMin) - edit.scrollOffsetPx,
           },
         ]
       : [];
@@ -748,6 +919,7 @@ export function DayView({
             onEventLongPress={handleEnterEdit}
             topOffset={headerHeight}
             scrollLocked={!!edit}
+            scrollContainerRef={baseScrollRef}
             verticalTransition={
               transition
                 ? {
@@ -855,7 +1027,7 @@ export function DayView({
         <TopNavBar backLabel={MONTH_NAMES[selectedDate.getMonth()].slice(0, 3)} onBack={onBack} />
       </div>
 
-      <div className="absolute inset-x-0 bottom-0 z-40 select-none" style={chromeStyle}>
+      <div ref={bottomBarRef} className="absolute inset-x-0 bottom-0 z-40 select-none" style={chromeStyle}>
         <BottomBar onToday={() => navigateTo(today)} onGridView={onGridView} />
       </div>
     </div>
