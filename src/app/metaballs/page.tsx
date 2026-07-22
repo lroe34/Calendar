@@ -40,13 +40,15 @@ export default function MetaballPage() {
     <div className="h-full overflow-y-auto bg-[#05060a] text-white">
       <div className="mx-auto flex max-w-[1120px] flex-col gap-6 px-5 py-8">
         <header className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Mitosis button</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Mitosis toolbar</h1>
           <p className="max-w-2xl text-sm leading-relaxed text-white/55">
-            A single liquid-glass circle that splits into two of the same size —
-            like a dividing cell. Tap it and the goo bridge stretches, thins, then
-            snaps into two independent buttons. Tap either choice to merge back.
-            The goo surface is a reusable <code>&lt;LiquidContainer&gt;</code>; this
-            page just controls which buttons live inside it.
+            One liquid-glass toolbar holding three icons. Tap it and the leftmost
+            icon melts away while a fresh button <em>mitosises</em> out of the left
+            side — the goo bridge stretches, thins, then pinches into a separate
+            circle beside the remaining search + plus pill. Tap the bud (or the
+            backdrop) to fuse it back. The goo surface is a reusable{" "}
+            <code>&lt;LiquidContainer&gt;</code>; this page just controls which
+            buttons live inside it.
           </p>
         </header>
 
@@ -194,9 +196,17 @@ function LiquidChips({
 
 /* ------------------------------------------------------------------ *
  * The mitosis demo, expressed purely as "which items are present".
+ *
+ * Merged  → [ list-circle ][ search + plus pill ]  — hugging with a tiny gap,
+ *           so the goo fuses them into one continuous toolbar of three icons.
+ * Split   → [ stack-circle ]      [ search + plus pill ]  — a wide gap, so the
+ *           bridge pinches and the left cell buds off on its own.
+ *
+ * The "search + plus" pill (id "tools") lives in *both* sets, so it just slides
+ * and stays put. The left cell swaps identity — the "list" blob dies (melting
+ * back toward centre) while a new "menu" blob is born from the same spot — which
+ * the goo renders as one dividing cell.
  * ------------------------------------------------------------------ */
-
-type Choice = "event" | "reminder";
 
 function MitosisButton({
   blur,
@@ -211,44 +221,48 @@ function MitosisButton({
   showOutlines: boolean;
   theme: LiquidTheme;
 }) {
-  const [open, setOpen] = useState(false);
-  const [choice, setChoice] = useState<Choice | null>(null);
+  const [split, setSplit] = useState(false);
 
-  const select = (kind: Choice) => {
-    setChoice(kind);
-    setOpen(false);
-  };
-
-  // Closed → one "+" cell. Open → two daughter cells. Swapping the array is
-  // all it takes; the container tweens the split/merge.
   const items = useMemo<LiquidItem[]>(() => {
-    if (!open) {
+    // The right-hand pill is identical in both states, so it persists.
+    const tools: LiquidItem = {
+      id: "tools",
+      width: 150,
+      icon: () => (
+        <g>
+          <g transform="translate(-30, 0)">
+            <SearchIcon />
+          </g>
+          <g transform="translate(30, 0)">
+            <ToolbarPlusIcon />
+          </g>
+        </g>
+      ),
+      onClick: () => setSplit((s) => !s),
+    };
+
+    if (!split) {
+      // Three icons fused into one bar: list-circle hugging the tools pill.
       return [
         {
-          id: "seed",
-          icon: () => <PlusIcon />,
-          onClick: () => {
-            setChoice(null);
-            setOpen(true);
-          },
+          id: "list",
+          icon: () => <SidebarIcon />,
+          onClick: () => setSplit(true),
         },
+        tools,
       ];
     }
+
+    // The bud has separated: its own circle, then the tools pill.
     return [
       {
-        id: "event",
-        icon: () => <CalendarIcon />,
-        label: "Event",
-        onClick: () => select("event"),
+        id: "menu",
+        icon: () => <StackIcon />,
+        onClick: () => setSplit(false),
       },
-      {
-        id: "reminder",
-        icon: () => <ClockIcon />,
-        label: "Reminder",
-        onClick: () => select("reminder"),
-      },
+      tools,
     ];
-  }, [open]);
+  }, [split]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -262,11 +276,17 @@ function MitosisButton({
         <LiquidContainer
           items={items}
           theme={theme}
+          radius={40}
+          // Overlap the pair while merged so they fuse into one seamless bar
+          // (no pinched waist); pull them wide apart once split so the bud
+          // clears the pill.
+          gap={split ? 44 : -26}
           blur={blur}
           contrast={contrast}
           threshold={threshold}
           showOutlines={showOutlines}
-          onBackdrop={open ? () => setOpen(false) : undefined}
+          height={200}
+          onBackdrop={split ? () => setSplit(false) : undefined}
           className="w-full touch-none select-none rounded-2xl"
           style={{
             background:
@@ -277,17 +297,15 @@ function MitosisButton({
 
       <div className="flex flex-wrap items-center gap-3 text-sm">
         <button
-          onClick={() => (open ? setOpen(false) : (setChoice(null), setOpen(true)))}
+          onClick={() => setSplit((s) => !s)}
           className="rounded-lg bg-white/[0.07] px-3 py-1.5 font-medium text-white/80 transition hover:bg-white/[0.12]"
         >
-          {open ? "Merge back" : "Split ▸"}
+          {split ? "Merge back" : "Split ▸"}
         </button>
         <span className="text-white/40">
-          {open
-            ? "Pick a daughter — or tap the backdrop to merge."
-            : choice
-              ? `Created a ${choice}.`
-              : "Tap the cell to divide."}
+          {split
+            ? "The bud has split off — tap it or the backdrop to fuse back."
+            : "Tap the toolbar to bud a button off the left."}
         </span>
       </div>
 
@@ -314,35 +332,54 @@ function PlusIcon() {
   );
 }
 
-function CalendarIcon() {
+/* A slimmer "+" for inside the tools pill (the page-level PlusIcon is used by
+ * the chips demo, so keep it untouched). */
+function ToolbarPlusIcon() {
   return (
-    <g
-      fill="none"
-      stroke="#ffffff"
-      strokeWidth={2.4}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect x={-12} y={-9} width={24} height={21} rx={3.5} />
-      <line x1={-12} y1={-2} x2={12} y2={-2} />
-      <line x1={-6} y1={-14} x2={-6} y2={-6} />
-      <line x1={6} y1={-14} x2={6} y2={-6} />
+    <g stroke="#ffffff" strokeWidth={2.6} strokeLinecap="round">
+      <line x1={-9} y1={0} x2={9} y2={0} />
+      <line x1={0} y1={-9} x2={0} y2={9} />
     </g>
   );
 }
 
-function ClockIcon() {
+function SearchIcon() {
+  return (
+    <g fill="none" stroke="#ffffff" strokeWidth={2.4} strokeLinecap="round">
+      <circle cx={-2} cy={-2} r={8} />
+      <line x1={4} y1={4} x2={10} y2={10} />
+    </g>
+  );
+}
+
+/* Leftmost glyph while merged: a sidebar / list-detail panel (matches the
+ * three-icon toolbar in the reference). */
+function SidebarIcon() {
   return (
     <g
       fill="none"
       stroke="#ffffff"
-      strokeWidth={2.4}
+      strokeWidth={2.2}
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      <circle cx={0} cy={0} r={12} />
-      <line x1={0} y1={0} x2={0} y2={-7} />
-      <line x1={0} y1={0} x2={6} y2={3} />
+      <rect x={-12} y={-11} width={24} height={22} rx={5} />
+      <line x1={-3} y1={-11} x2={-3} y2={11} />
+      <g stroke="none" fill="#ffffff">
+        <circle cx={-8} cy={-5} r={1.4} />
+        <circle cx={-8} cy={0} r={1.4} />
+        <circle cx={-8} cy={5} r={1.4} />
+      </g>
+    </g>
+  );
+}
+
+/* The daughter that buds off: two stacked rounded bars. */
+function StackIcon() {
+  return (
+    <g fill="none" stroke="#ffffff" strokeWidth={2.4} strokeLinejoin="round">
+      <rect x={-11} y={-9} width={22} height={7} rx={3.5} />
+      <rect x={-11} y={2} width={22} height={7} rx={3.5} />
     </g>
   );
 }
