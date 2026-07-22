@@ -283,7 +283,27 @@ Day view hour grid") — see the updated §6.2.
 
 ### 3.5.6 Where this goes in the repo (implementation surface)
 
-Nothing here is built yet — the Day grid is currently render-only. Landing this touches:
+> **Status: implemented.** A first pass of this interaction now ships. What
+> landed, and where:
+> - `src/lib/day-grid.ts` — `SNAP_MINUTES`/`MIN_EVENT_DURATION_MIN`/`LONG_PRESS_MS`
+>   constants plus `pxToMinutes`, `snapMinutes`, `clamp`, and `minutesToLocalIso`.
+> - `src/components/day/EventBlock.tsx` — `ghost`, `editing`, and `zIndexOverride`
+>   props; the two diagonal resize handles (rendered outside the fill's
+>   `overflow-hidden` so they can straddle the edge); pointer hooks.
+> - `src/components/day/HourGrid.tsx` — owns the edit state machine: long-press to
+>   enter, body-drag to move, handle-drag to resize, snapped to 15 min, with the
+>   ghost/picked-up copies and the drag-gated quarter-hour gutter ticks. A
+>   tap-away backdrop exits edit mode.
+> - `CalendarApp` → `DayView` → `DayContentPane` thread a single
+>   `onUpdateEventTimes(id, startIso, endIso)` action that writes the new
+>   start/end back into event state (the same path the detail-sheet edit will use).
+>
+> Deferred from this pass (still open): cross-day drag, live neighbor re-layout
+> during a drag, the recurring "this / all future events" prompt on commit, and
+> the pickup/snap-back *motion* polish (§3.5.7). Handles show for mouse/touch;
+> haptics are a best-effort `navigator.vibrate`.
+
+Original plan (for reference) — landing this touches:
 
 - **`src/components/day/HourGrid.tsx`** — owns the timed-event layer and the gutter, so it
   hosts the new edit state: which event (if any) is being edited, its live (dragged)
@@ -711,16 +731,16 @@ Concrete list of things that are easy to skip, approximate, or get subtly wrong:
 - [ ] Two-part event block coloring: inset rounded-capsule left accent (not a flush
       border) + separate lighter tint fill.
 - [ ] Mini week-strip in Day view is interactive/independent, not a static label row.
-- [ ] Long-pressing a Day-view event enters on-grid edit: the original stays as a dimmed
+- [x] Long-pressing a Day-view event enters on-grid edit: the original stays as a dimmed
       ghost at its old time while a solid-fill/white-text copy tracks the drag (§3.5) —
       it's a separate affordance from the detail-sheet edit mode, not a replacement for it.
-- [ ] The move/resize copy reuses `EventBlock` `variant="solid"`, and the ghost reuses the
+- [x] The move/resize copy reuses `EventBlock` `variant="solid"`, and the ghost reuses the
       normal tint variant at reduced opacity — no third one-off block renderer.
-- [ ] Two diagonal drag handles: top-right adjusts start, bottom-left adjusts end; handles
+- [x] Two diagonal drag handles: top-right adjusts start, bottom-left adjusts end; handles
       only appear while editing; resize clamps to the min-duration floor.
-- [ ] Quarter-hour (:15/:30/:45) gutter ticks appear only during a drag/resize and imply a
+- [x] Quarter-hour (:15/:30/:45) gutter ticks appear only during a drag/resize and imply a
       15-min snap; the gutter shows whole hours only at rest.
-- [ ] Move/resize writes the event's new start/end through one shared "update event times"
+- [x] Move/resize writes the event's new start/end through one shared "update event times"
       action reused by the detail-sheet edit mode — mock data can't stay static.
 - [ ] All bars/blocks use per-calendar color pulled from the data model, never hardcoded
       per screen.

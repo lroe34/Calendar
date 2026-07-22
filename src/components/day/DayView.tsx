@@ -30,6 +30,7 @@ interface DayViewProps {
   onSelectDate: (date: Date) => void;
   onBack: () => void;
   onSelectEvent: (event: CalendarEvent) => void;
+  onUpdateEventTimes?: (id: string, startIso: string, endIso: string) => void;
   onGridView?: () => void;
   transition?: DayViewTransition | null;
 }
@@ -171,6 +172,7 @@ export function DayView({
   onSelectDate,
   onBack,
   onSelectEvent,
+  onUpdateEventTimes,
   onGridView,
   transition = null,
 }: DayViewProps) {
@@ -448,6 +450,7 @@ export function DayView({
             reminders={reminders}
             calendarsById={calendarsById}
             onSelectEvent={onSelectEvent}
+            onUpdateEventTimes={onUpdateEventTimes}
             topOffset={headerHeight}
             verticalTransition={
               transition
@@ -470,6 +473,7 @@ export function DayView({
               reminders={reminders}
               calendarsById={calendarsById}
               onSelectEvent={onSelectEvent}
+              onUpdateEventTimes={onUpdateEventTimes}
               topOffset={headerHeight}
               verticalTransition={null}
             />

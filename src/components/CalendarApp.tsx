@@ -307,6 +307,12 @@ export function CalendarApp() {
     setEvents((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
   }
 
+  // Shared "retime an event" path — used both by the detail-sheet edit form
+  // and by the Day view's direct on-grid move/resize.
+  function handleUpdateEventTimes(id: string, startIso: string, endIso: string) {
+    setEvents((prev) => prev.map((e) => (e.id === id ? { ...e, start: startIso, end: endIso } : e)));
+  }
+
   function handleDeleteEvent(id: string) {
     setEvents((prev) => prev.filter((e) => e.id !== id));
     setOpenEventId(null);
@@ -436,6 +442,7 @@ export function CalendarApp() {
             onSelectDate={(date) => setSelectedDate(startOfDay(date))}
             onBack={handleBackToMonth}
             onSelectEvent={(event) => setOpenEventId(event.id)}
+            onUpdateEventTimes={handleUpdateEventTimes}
             onGridView={() => setCalendarListOpen(true)}
             transition={
               transition

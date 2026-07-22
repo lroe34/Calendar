@@ -25,6 +25,7 @@ interface DayContentPaneProps {
   reminders: Reminder[];
   calendarsById: Map<string, CalendarSource>;
   onSelectEvent: (event: CalendarEvent) => void;
+  onUpdateEventTimes?: (id: string, startIso: string, endIso: string) => void;
   /** Height of the pinned chrome (nav spacer + mini week strip) this pane sits below. */
   topOffset: number;
   verticalTransition?: DayPaneVerticalTransition | null;
@@ -37,6 +38,7 @@ export function DayContentPane({
   reminders,
   calendarsById,
   onSelectEvent,
+  onUpdateEventTimes,
   topOffset,
   verticalTransition = null,
 }: DayContentPaneProps) {
@@ -224,6 +226,7 @@ export function DayContentPane({
           calendarsById={calendarsById}
           isToday={isToday}
           onSelectEvent={onSelectEvent}
+          onUpdateEventTimes={onUpdateEventTimes}
         />
       </div>
 
