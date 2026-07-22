@@ -37,7 +37,14 @@ export type LiquidItem = {
   /** Crisp glyph drawn centred on the blob. `progress` runs 0→1 as the blob
    *  grows in, so you can fade / scale the icon with it. Draw around (0, 0). */
   icon?: (progress: number) => ReactNode;
-  /** Caption shown under the blob. */
+  /** Text drawn *inside* the blob. Its presence turns the blob into a
+   *  pill/capsule: the body widens to fit the text (height stays 2·radius,
+   *  corners fully rounded), while an icon-only or empty blob stays circular. */
+  text?: string;
+  /** Force a pill body this wide (full width, px) instead of measuring `text`.
+   *  Ignored for circular blobs. */
+  width?: number;
+  /** Caption shown *under* the blob. */
   label?: string;
   /** Per-blob fill override (any SVG paint). Defaults to the theme gradient. */
   fill?: string;
@@ -51,7 +58,8 @@ export type LiquidContainerProps = {
   blur?: number;
   contrast?: number;
   threshold?: number;
-  /** Blob radius at rest, and the edge gap between adjacent blobs. */
+  /** Blob half-height at rest (the pill radius), and the edge gap between
+   *  adjacent blobs. */
   radius?: number;
   gap?: number;
   /** How much a blob swells while it is in motion (0 = no swell). */
@@ -60,7 +68,7 @@ export type LiquidContainerProps = {
   height?: number;
   /** Fired when the empty backdrop (outside every blob) is tapped. */
   onBackdrop?: () => void;
-  /** Debug: dashed outlines of the true circle geometry. */
+  /** Debug: dashed outlines of the true blob geometry. */
   showOutlines?: boolean;
   className?: string;
   style?: React.CSSProperties;
@@ -76,13 +84,26 @@ const easeInOutCubic = (p: number) =>
   p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
+/* Rest half-width of a blob. A circle is just a pill whose half-width equals
+ * its radius, so everything renders as one rounded rect. Text blobs widen to
+ * fit their glyphs (rough advance-width estimate — no DOM measuring needed). */
+const PILL_FONT = 14.5;
+const PILL_PAD_X = 20;
+const halfWidthOf = (item: LiquidItem, R: number) => {
+  if (item.width != null) return Math.max(R, item.width / 2);
+  if (!item.text) return R; // circular
+  const textW = item.text.length * PILL_FONT * 0.58;
+  return Math.max(R, textW / 2 + PILL_PAD_X);
+};
+
 /* A blob's live animation state. Positions/scales are tweened imperatively
  * from (px, ps) toward (tx, ts) over `dur` ms starting at `start`. */
 type Blob = {
   id: string;
   item: LiquidItem;
+  hw: number; // rest half-width (R for circles, wider for pills)
   x: number; // current centre x
-  s: number; // current scale (1 = full radius)
+  s: number; // current scale (1 = full size)
   p: number; // current tween progress 0..1
   px: number; // tween-from x
   ps: number; // tween-from scale
@@ -118,7 +139,6 @@ export default function LiquidContainer({
   const CX = width / 2;
   const CY = height / 2 - 4;
   const R = radius;
-  const SEP = 2 * R + gap; // centre-to-centre spacing of adjacent blobs
 
   // Mutable animation store. Only ever touched inside effects / rAF — never
   // read or written during render (React 19 forbids ref access in render).
@@ -184,13 +204,24 @@ export default function LiquidContainer({
     const ease = opening ? easeOutBack : easeInOutCubic;
     const dur = opening ? 640 : 440;
 
+    // Width-aware, centre-justified row: pack the live blobs edge to edge with
+    // `gap` between them, then centre the whole run on CX. Uniform circles
+    // reduce to the old evenly-spaced layout; pills claim the width they need.
+    const widths = live.map((item) => halfWidthOf(item, R));
+    const rowWidth =
+      widths.reduce((sum, hw) => sum + 2 * hw, 0) + gap * Math.max(0, N - 1);
+    let cursor = CX - rowWidth / 2;
+
     live.forEach((item, i) => {
-      const targetX = CX + (i - (N - 1) / 2) * SEP;
+      const hw = widths[i];
+      const targetX = cursor + hw;
+      cursor += 2 * hw + gap;
       const existing = map.get(item.id);
       if (!existing) {
         map.set(item.id, {
           id: item.id,
           item,
+          hw,
           x: CX,
           s: 0,
           p: 0,
@@ -205,6 +236,7 @@ export default function LiquidContainer({
         });
       } else {
         existing.item = item;
+        existing.hw = hw;
         // Only restart the tween if the target actually moved, so settled
         // blobs don't pulse when an unrelated sibling is added/removed.
         if (existing.tx !== targetX || existing.ts !== 1 || existing.dying) {
@@ -237,7 +269,7 @@ export default function LiquidContainer({
     prevCountRef.current = N;
     publish(map); // show the reconciled set right away, then animate it
     startLoop();
-  }, [idsKey, CX, SEP, publish, startLoop]);
+  }, [idsKey, CX, R, gap, publish, startLoop]);
 
   useEffect(
     () => () => {
@@ -247,8 +279,13 @@ export default function LiquidContainer({
   );
 
   const blobs = view;
-  // Visible radius of a blob: scaled by its growth, and swollen while moving.
-  const radOf = (b: Blob) => R * b.s * (1 + swell * Math.sin(Math.PI * b.p));
+  // Live half-dimensions of a blob: scaled by its growth and swollen while
+  // moving. `rad` is the half-height (and the fully-rounded corner radius);
+  // `halfW` is the half-width — equal to `rad` for circles, larger for pills.
+  const sizeOf = (b: Blob) => {
+    const f = b.s * (1 + swell * Math.sin(Math.PI * b.p));
+    return { rad: R * f, halfW: b.hw * f };
+  };
 
   return (
     <svg
@@ -297,29 +334,36 @@ export default function LiquidContainer({
         onPointerDown={onBackdrop ? () => onBackdrop() : undefined}
       />
 
-      {/* The gooey body: every blob fused by the filter. */}
+      {/* The gooey body: every blob fused by the filter. A circle is just a
+          pill whose width equals its height, so all blobs are rounded rects. */}
       <g filter={`url(#${gooId})`}>
-        {blobs.map((b) => (
-          <circle
-            key={b.id}
-            cx={b.x}
-            cy={CY}
-            r={radOf(b)}
-            fill={b.item.fill ?? `url(#${gradId})`}
-          />
-        ))}
+        {blobs.map((b) => {
+          const { rad, halfW } = sizeOf(b);
+          return (
+            <rect
+              key={b.id}
+              x={b.x - halfW}
+              y={CY - rad}
+              width={2 * halfW}
+              height={2 * rad}
+              rx={rad}
+              ry={rad}
+              fill={b.item.fill ?? `url(#${gradId})`}
+            />
+          );
+        })}
       </g>
 
       {/* Crisp glass sheen, on top so the blur doesn't smear it. */}
       <g pointerEvents="none">
         {blobs.map((b) => {
-          const rad = radOf(b);
+          const { rad, halfW } = sizeOf(b);
           return (
             <ellipse
               key={b.id}
               cx={b.x}
               cy={CY - rad * 0.42}
-              rx={rad * 0.52}
+              rx={halfW * 0.6}
               ry={rad * 0.3}
               fill={`url(#${sheenId})`}
               opacity={0.55 * clamp01(b.s)}
@@ -328,20 +372,37 @@ export default function LiquidContainer({
         })}
       </g>
 
-      {/* Icons + labels, crisp on top. */}
+      {/* Icons, inner pill text, and captions — crisp on top. */}
       <g pointerEvents="none">
         {blobs.map((b) => {
           const item = items.find((i) => i.id === b.id) ?? b.item;
-          const rad = radOf(b);
+          const { rad } = sizeOf(b);
+          const s = clamp01(b.s);
           return (
             <g key={b.id}>
               {item.icon && (
                 <g
-                  transform={`translate(${b.x}, ${CY}) scale(${0.6 + 0.4 * clamp01(b.s)})`}
-                  opacity={clamp01(b.s)}
+                  transform={`translate(${b.x}, ${CY}) scale(${0.6 + 0.4 * s})`}
+                  opacity={s}
                 >
-                  {item.icon(clamp01(b.s))}
+                  {item.icon(s)}
                 </g>
+              )}
+              {item.text && (
+                <text
+                  x={b.x}
+                  y={CY}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fill="#ffffff"
+                  // Fade the label in only once the pill is mostly grown, so it
+                  // doesn't overflow the still-small body mid-transition.
+                  opacity={clamp01((b.s - 0.45) / 0.55)}
+                  fontSize={PILL_FONT}
+                  fontWeight={600}
+                >
+                  {item.text}
+                </text>
               )}
               {item.label && (
                 <text
@@ -349,7 +410,7 @@ export default function LiquidContainer({
                   y={CY + rad + 26}
                   textAnchor="middle"
                   fill="#ffffff"
-                  opacity={clamp01(b.s) * 0.75}
+                  opacity={s * 0.75}
                   fontSize={13}
                   fontWeight={500}
                 >
@@ -364,9 +425,20 @@ export default function LiquidContainer({
       {/* True geometry overlay for debugging the pinch point. */}
       {showOutlines && (
         <g fill="none" stroke={theme.glow} strokeOpacity={0.6} strokeDasharray="4 4">
-          {blobs.map((b) => (
-            <circle key={b.id} cx={b.x} cy={CY} r={radOf(b)} />
-          ))}
+          {blobs.map((b) => {
+            const { rad, halfW } = sizeOf(b);
+            return (
+              <rect
+                key={b.id}
+                x={b.x - halfW}
+                y={CY - rad}
+                width={2 * halfW}
+                height={2 * rad}
+                rx={rad}
+                ry={rad}
+              />
+            );
+          })}
         </g>
       )}
 
@@ -376,12 +448,16 @@ export default function LiquidContainer({
           const item = items.find((i) => i.id === b.id);
           if (!item?.onClick || b.dying) return null;
           const onClick = item.onClick;
+          const { rad, halfW } = sizeOf(b);
           return (
-            <circle
+            <rect
               key={b.id}
-              cx={b.x}
-              cy={CY}
-              r={radOf(b)}
+              x={b.x - halfW}
+              y={CY - rad}
+              width={2 * halfW}
+              height={2 * rad}
+              rx={rad}
+              ry={rad}
               fill="transparent"
               style={{ cursor: "pointer" }}
               onPointerDown={(e) => {

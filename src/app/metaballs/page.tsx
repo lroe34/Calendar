@@ -74,6 +74,115 @@ export default function MetaballPage() {
             setThemeIdx={setThemeIdx}
           />
         </div>
+
+        <section className="mt-2 flex flex-col gap-3 border-t border-white/10 pt-8">
+          <div className="flex flex-col gap-1">
+            <h2 className="text-xl font-semibold tracking-tight">Liquid chips</h2>
+            <p className="max-w-2xl text-sm leading-relaxed text-white/55">
+              The same <code>&lt;LiquidContainer&gt;</code> holding an arbitrary,
+              changing set of blobs — including pill-shaped <em>text</em> buttons.
+              Tap a chip to drop it (it melts back into the row); tap the{" "}
+              <span className="text-white/80">+</span> to grow the next one in. The
+              row re-packs and re-centres itself as the set changes.
+            </p>
+          </div>
+          <LiquidChips theme={theme} showOutlines={showOutlines} />
+        </section>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Second demo: an arbitrary, changing set of pill/text buttons.
+ *
+ * This is the same container as above; the only difference is the items —
+ * text pills instead of icon circles, and a count that the user drives up
+ * and down. Nothing about the container is toolbar- or chip-specific.
+ * ------------------------------------------------------------------ */
+
+const CHIP_POOL: { id: string; label: string }[] = [
+  { id: "today", label: "Today" },
+  { id: "week", label: "This week" },
+  { id: "month", label: "This month" },
+  { id: "someday", label: "Someday" },
+  { id: "flagged", label: "Flagged" },
+];
+
+function LiquidChips({
+  theme,
+  showOutlines,
+}: {
+  theme: LiquidTheme;
+  showOutlines: boolean;
+}) {
+  const [active, setActive] = useState<string[]>(["today", "week", "month"]);
+
+  const items = useMemo<LiquidItem[]>(() => {
+    const inactive = CHIP_POOL.filter((c) => !active.includes(c.id));
+    const chips: LiquidItem[] = active.map((id) => {
+      const chip = CHIP_POOL.find((c) => c.id === id)!;
+      return {
+        id: chip.id,
+        text: chip.label,
+        onClick: () => setActive((a) => a.filter((x) => x !== id)),
+      };
+    });
+    // A circular "+" that grows the next inactive chip into the row.
+    if (inactive.length > 0) {
+      chips.push({
+        id: "add",
+        icon: () => <PlusIcon />,
+        onClick: () => setActive((a) => [...a, inactive[0].id]),
+      });
+    }
+    return chips;
+  }, [active]);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div
+        className="rounded-2xl p-px"
+        style={{
+          background:
+            "linear-gradient(160deg, rgba(255,255,255,0.16), rgba(255,255,255,0.02) 40%, rgba(255,255,255,0.08))",
+        }}
+      >
+        <LiquidContainer
+          items={items}
+          theme={theme}
+          radius={28}
+          gap={16}
+          blur={11}
+          contrast={20}
+          threshold={8}
+          width={620}
+          height={150}
+          showOutlines={showOutlines}
+          className="w-full touch-none select-none rounded-2xl"
+          style={{
+            background:
+              "radial-gradient(120% 120% at 50% 0%, #12131c 0%, #05060a 70%)",
+          }}
+        />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <button
+          onClick={() => setActive(CHIP_POOL.map((c) => c.id))}
+          className="rounded-lg bg-white/[0.07] px-3 py-1.5 font-medium text-white/80 transition hover:bg-white/[0.12]"
+        >
+          Fill all
+        </button>
+        <button
+          onClick={() => setActive([])}
+          className="rounded-lg bg-white/[0.07] px-3 py-1.5 font-medium text-white/80 transition hover:bg-white/[0.12]"
+        >
+          Clear
+        </button>
+        <span className="text-white/40">
+          {active.length} of {CHIP_POOL.length} chips
+        </span>
       </div>
     </div>
   );
