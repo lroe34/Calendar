@@ -188,6 +188,186 @@ chrome, not the app — ignored below except where they affect safe-area layout.
 
 ---
 
+## 3.5 Day view — long-press to move & resize an event (edit-on-grid)
+
+Reference: a cropped close-up of the Day-view hour grid (roughly the 1 PM–3 PM window)
+captured mid-gesture, while a recurring "Allergy Shots" event is being dragged to a new
+time. This is a *different* editing affordance from the detail-sheet edit mode (§3.7):
+that one edits fields inside a modal sheet; this one directly manipulates the block *in
+place* on the grid. Both must exist. This resolves the two items previously flagged
+"unconfirmed" in §6.2 ("long-press behavior on events" and "drag-to-resize/move on the
+Day view hour grid") — see the updated §6.2.
+
+### 3.5.1 What the reference image shows
+
+- **Two copies of the same event are on screen at once.** The upper one — starting at
+  ~1 PM — is a **faded "ghost"**: the normal Day-view tint block (§3.4), same blue
+  left-accent capsule, same title/location/recurrence-icon content, but rendered at
+  reduced opacity so it reads as a placeholder for where the event *currently still
+  lives*. The lower one — starting at ~2 PM — is the **picked-up copy** under the finger:
+  a fully **saturated solid-blue fill with white text** (title bold white, location line
+  a lighter white, recurrence looped-arrow icon white in the top-right), i.e. the same
+  inverted "solid" restyle already built for the detail sheet's mini day-preview (§3.6.5,
+  `variant="solid"` on `EventBlock`).
+- **Two circular white drag handles** sit on the picked-up copy: one on the **top-right
+  corner**, one on the **bottom-left corner**. Small filled white discs with a soft
+  shadow, straddling the block's edge.
+- **A sub-hour marker "`:45`" has appeared in the left gutter** between the `1 PM` and
+  `2 PM` hour labels, in the same gray gutter type style but minute-only (no AM/PM).
+  It sits ~¾ of the way down the 1 PM→2 PM interval, i.e. aligned to the block edge the
+  gesture is currently moving. This is the 15/30/45 tick the interaction exposes while
+  dragging (see §3.5.5).
+- **A soft green vertical accent runs down the extreme left edge** of the crop (left of
+  the gutter numbers), with a faint green tint bleeding in at the very top-left.
+  Ambiguous from this crop alone — most likely an unrelated green-calendar event sitting
+  just above and cropped off, rather than a deliberate part of the edit affordance.
+  Flag as an open question (§3.5.8) rather than building a green "edit is active" edge
+  indicator off one partial frame.
+
+### 3.5.2 The gesture / interaction model (as described)
+
+- **Entry: long-press on an event block** in Day view puts that event into a
+  direct-manipulation edit state on the grid (distinct from tapping, which opens the
+  detail sheet §3.6, and distinct from the sheet's "Edit" button). iOS convention pairs
+  this with a haptic "pop" on pickup — approximate per §6.2's haptics note.
+- **Drag the body to reschedule**: moving the picked-up block up/down retimes the event,
+  keeping its duration fixed. To move it to **another day**, hold it with one finger and
+  swipe the day grid with a second finger — the held copy stays pinned while the day slides
+  beneath it, and releasing drops it on the day now showing (implemented — see §3.5.6/§3.5.7).
+- **Resize via the two handles**: the **top-right handle adjusts the start time** (drags
+  the top edge), the **bottom-left handle adjusts the end time** (drags the bottom edge),
+  each independently, with the opposite edge pinned. Enforce the same
+  `MIN_EVENT_HEIGHT_PX` floor the renderer already uses so a block can't be resized to
+  zero/negative duration.
+
+### 3.5.3 Ghost vs. picked-up copy — the two states
+
+- The **ghost** is the event at its *original, un-committed* start/end, held in place and
+  dimmed, so the user can see how far they've moved from where it was. It is not
+  interactive during the drag.
+- The **picked-up copy** tracks the gesture live and is drawn in the solid/white-text
+  variant so it clearly reads as "selected/active," pops above neighbors, and doesn't get
+  visually lost against same-color tint blocks. It should sit above everything (including
+  the current-time line and any overlapping columns) while dragging.
+- On **commit** (finger up / gesture end) the ghost disappears and the event snaps to the
+  new time in its normal tint style. On **cancel** the picked-up copy returns to the
+  ghost's position. Exact commit-vs-cancel triggers (does releasing always commit? is
+  there an explicit confirm?) aren't provable from a still — assume release-commits per
+  iOS convention and flag in §3.5.8.
+
+### 3.5.4 Drag handles — details
+
+- Rendered only while the event is in the on-grid edit state — normal (non-editing)
+  blocks show no handles.
+- Handle hit-target must be larger than the visible disc (finger-sized), and should
+  extend slightly outside the block bounds (the discs straddle the corner in the
+  reference), so grabbing an edge is forgiving.
+- Top-right = start edge, bottom-left = end edge. Don't put both handles on the same side
+  or mirror them — the reference is specifically diagonal (top-right / bottom-left).
+
+### 3.5.5 Sub-hour gutter markers (15/30/45)
+
+- While dragging or resizing, the left gutter gains **intermediate minute ticks at :15,
+  :30, :45** *under* the hour labels — normally the gutter shows whole hours only (§3.3).
+  In the reference only `:45` is visible because the crop is tight and/or only the ticks
+  near the active edge are shown.
+- Open question (§3.5.8): are all three (:15/:30/:45) shown for every hour across the
+  whole visible grid for the duration of the gesture, or only the tick(s) nearest the
+  edge being moved? The single frame can't decide this — the safe default is to reveal
+  the quarter-hour ticks across the grid while a drag/resize is active and hide them again
+  on release.
+- These ticks strongly imply a **15-minute snap increment** for both move and resize
+  (matching standard iOS Calendar). Treat 15 min as the working snap granularity until a
+  motion reference proves otherwise.
+- Styling: same gray gutter type as the hour labels, but minute-only (`:15`/`:30`/`:45`,
+  no AM/PM), lighter/secondary weight so hour labels stay dominant.
+
+### 3.5.6 Where this goes in the repo (implementation surface)
+
+> **Status: implemented, including cross-day drag.** What landed, and where:
+> - `src/lib/day-grid.ts` — `SNAP_MINUTES`/`MIN_EVENT_DURATION_MIN`/`LONG_PRESS_MS`
+>   constants plus `pxToMinutes`, `snapMinutes`, `clamp`, and `minutesToLocalIso`.
+> - `src/components/day/EventBlock.tsx` — split into a positioned `EventBlock`
+>   wrapper and a reusable `EventBlockBody` (accent capsule + fill + text +
+>   resize handles). The pinned picked-up copy renders `EventBlockBody` directly;
+>   the ghost renders `EventBlock` with `ghost`.
+> - `src/components/day/HourGrid.tsx` — detects the long-press on an event and
+>   reports it up (with the block's viewport rect); renders the dimmed ghost at
+>   the event's resting time and hides the picked-up event's normal block. It no
+>   longer owns the drag.
+> - `src/components/day/DayView.tsx` — **owns the whole edit gesture**, lifted
+>   above the swipeable panes so a held event survives day-to-day swiping. The
+>   picked-up copy is a **pinned overlay** (fixed in the viewport) that stays put
+>   while the day grid slides beneath it; long-press to enter, one finger retimes
+>   (move/resize, 15-min snap), a **second finger swipes to another day** (the
+>   normal day-swipe runs concurrently, keyed to its own pointer). Releasing the
+>   held finger drops the event onto whatever day is now showing. The quarter-hour
+>   gutter ticks are pinned to the overlay's frame; a rest-only tap-away layer
+>   exits (absent mid-drag so the second finger can still swipe).
+> - `CalendarApp` → `DayView` thread one `onUpdateEventTimes(id, startIso, endIso)`
+>   action; the ISO carries the target day, so a cross-day drop just re-dates the
+>   event. **Neighbors re-layout on commit, not live during the drag** — the ghost
+>   holds the old slot open until release (the layout still counts the event at its
+>   resting time until the write lands).
+>
+> Deferred (still open): the recurring "this / all future events" prompt on
+> commit, and pickup/snap-back *motion* polish (§3.5.7). Cross-day pixel alignment
+> of the pinned copy against a differently-scrolled target day is a known v1
+> imperfection (the committed time is always exact). Handles show for mouse/touch;
+> haptics are a best-effort `navigator.vibrate`.
+
+Original plan (for reference) — landing this touches:
+
+- **`src/components/day/HourGrid.tsx`** — owns the timed-event layer and the gutter, so it
+  hosts the new edit state: which event (if any) is being edited, its live (dragged)
+  start/end vs. its committed start/end, and the pointer handlers. Today it only maps
+  events → `EventBlock` with a static layout and an `onSelectEvent` tap; it needs a
+  long-press → enter-edit path and pointer-move math that converts drag delta (px) → time
+  delta (minutes) using `PX_PER_MINUTE` from `day-grid.ts`, snapped to the 15-min grid.
+- **`src/components/day/EventBlock.tsx`** — already supports `variant="solid"` (the
+  white-text fill) and reads start/end from the event; it needs (a) an "editing" affordance
+  that renders the two corner handles, and (b) to accept a live start/end override (or a
+  pixel top/height override) so the picked-up copy can be positioned by the drag instead
+  of only by `event.start`/`event.end`. The **ghost** is just a second `EventBlock` of the
+  same event at reduced opacity in the normal tint variant.
+- **`src/components/day/HourGrid.tsx` gutter (or a small new sub-component)** — the
+  quarter-hour markers. The existing hour loop uses `formatHourParts` from
+  `date-utils.ts`; the sub-hour ticks are a parallel, drag-gated layer (`:15`/`:30`/`:45`
+  labels at `hour*HOUR_HEIGHT_PX + {15,30,45}*PX_PER_MINUTE`), only mounted while a
+  drag/resize is active.
+- **`src/lib/day-grid.ts`** — home for the new constants/helpers: a `SNAP_MINUTES = 15`,
+  px→minutes and minutes→snapped-time conversions, and the min-duration clamp reusing
+  `MIN_EVENT_HEIGHT_PX`. Keep the math here (pure, testable) rather than inline in the
+  component.
+- **State ownership / persistence** — `mock-data.ts` events are currently static. A real
+  move/resize has to write back the event's new `start`/`end`. Decide where mutable event
+  state lives (lift into `CalendarApp.tsx` / a store) since the detail-sheet edit mode
+  (§3.7) will need the same mutation path — build one shared "update event times" action,
+  not two.
+
+### 3.5.7 Open questions
+
+- The **green left-edge accent** — real edit indicator or a cropped adjacent event? (§3.5.1)
+- **Cross-day drag** — *resolved & implemented*: hold the event with one finger and swipe
+  to another day with a second finger; the held copy stays pinned while the day slides
+  underneath, and releasing drops it on the day now showing. (Single-finger auto-advance at
+  the screen edges was considered and not built — the two-finger gesture is the model.)
+- **Live overlap re-layout** — *resolved & implemented*: neighbors do **not** re-flow live;
+  a ghost holds the event's original slot during the drag and columns re-layout only on
+  commit. Both days re-flow — the source day reclaims the vacated slot, the target day makes
+  room.
+- **Snap increment**: 15 min assumed from the tick labels — confirm against the real app;
+  iOS sometimes uses finer snapping with a magnifier/haptic detent.
+- **Which markers show**: all quarter-hours across the grid vs. only near the active edge
+  (§3.5.5). Currently: the hours the two moving edges sit in.
+- **Recurring commit prompt**: whether a **recurring** event (this one recurs) prompts
+  "this event / all future events" on commit, the way the detail-sheet edit does in iOS.
+  Not yet.
+- Entry/exit **motion** (pop-on-pickup scale, ghost fade-in, snap-back easing, haptics) —
+  unconfirmed per §6.2 until we have a screen recording.
+
+---
+
 ## 3.6 Event Detail Sheet
 
 Reference: a screenshot of the "Flight: AA 1913 from ORD to IAH" event opened from Day
@@ -513,10 +693,14 @@ app in motion (ideally via screen recording).
 - Month density-mode switch (Compact/Stacked/Detailed/List): hard cut or animated morph.
 - Back-button pop direction/curve (Day→Month, Month→Year).
 - Event-block tap → detail view presentation (sheet, push, or zoom-from-block).
-- Drag-to-create and drag-to-resize/move on the Day view hour grid: snap increment,
-  ghost/placeholder treatment, handle behavior.
+- Drag-to-**create** on an empty part of the Day view hour grid: snap increment and
+  placeholder treatment. (Drag-to-**resize/move** an *existing* event is now specified —
+  see §3.5 — but its entry/exit *motion* is still unconfirmed; and drag-to-create from
+  empty space has no reference yet.)
 - `+` button → creation sheet presentation style.
-- Long-press behavior on dates/events (context menu / peek preview?).
+- Long-press on a **date** (context menu / peek preview?). Long-press on an **event** is
+  now specified as "enter on-grid move/resize edit" — see §3.5 — though its pickup motion
+  and haptics remain unconfirmed.
 - Current-time red line: continuous smooth creep vs. periodic re-render tick.
 
 **Placeholder assumptions to build against now** (standard iOS platform conventions,
@@ -564,6 +748,22 @@ Concrete list of things that are easy to skip, approximate, or get subtly wrong:
 - [ ] Two-part event block coloring: inset rounded-capsule left accent (not a flush
       border) + separate lighter tint fill.
 - [ ] Mini week-strip in Day view is interactive/independent, not a static label row.
+- [x] Long-pressing a Day-view event enters on-grid edit: the original stays as a dimmed
+      ghost at its old time while a solid-fill/white-text copy tracks the drag (§3.5) —
+      it's a separate affordance from the detail-sheet edit mode, not a replacement for it.
+- [x] The move/resize copy reuses `EventBlock` `variant="solid"`, and the ghost reuses the
+      normal tint variant at reduced opacity — no third one-off block renderer.
+- [x] Two diagonal drag handles: top-right adjusts start, bottom-left adjusts end; handles
+      only appear while editing; resize clamps to the min-duration floor.
+- [x] Quarter-hour (:15/:30/:45) gutter ticks appear only during a drag/resize and imply a
+      15-min snap; the gutter shows whole hours only at rest.
+- [x] Move/resize writes the event's new start/end through one shared "update event times"
+      action reused by the detail-sheet edit mode — mock data can't stay static.
+- [x] Cross-day drag is two-finger: one finger holds the event (a viewport-pinned copy that
+      stays put while the day grid slides), a second finger swipes the day; release drops it
+      on the day now showing. The edit gesture lives above the panes so it survives the swap.
+- [x] Neighbors re-layout on commit, not live: the ghost holds the original slot open during
+      the drag; both the source and target day re-flow only once the drop lands.
 - [ ] All bars/blocks use per-calendar color pulled from the data model, never hardcoded
       per screen.
 - [ ] Event detail sheet is a true modal sheet (dimmed background peeking through, rounded

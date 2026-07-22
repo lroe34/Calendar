@@ -2,13 +2,26 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
-import type { CalendarEvent, CalendarSource, Reminder } from "@/lib/types";
+import type { CalendarColorName, CalendarEvent, CalendarSource, Reminder } from "@/lib/types";
 import { MONTH_NAMES, addDays, isSameDay, startOfDay } from "@/lib/date-utils";
+import {
+  EVENT_EDGE_GAP_PX,
+  MINUTES_IN_DAY,
+  MIN_EVENT_DURATION_MIN,
+  MIN_EVENT_HEIGHT_PX,
+  clamp,
+  minutesToLocalIso,
+  minutesToPx,
+  pxToMinutes,
+  snapMinutes,
+} from "@/lib/day-grid";
 import { TopNavBar } from "@/components/shared/TopNavBar";
 import { BottomBar } from "@/components/shared/BottomBar";
 import { TRANSITION_MS, TRANSITION_EASE } from "@/lib/transition-constants";
 import { MiniWeekStrip } from "./MiniWeekStrip";
 import { DayContentPane } from "./DayContentPane";
+import { EventBlockBody, type ResizeEdge } from "./EventBlock";
+import type { EventLongPressInfo } from "./HourGrid";
 
 export interface DayViewTransition {
   mode: "exit" | "enter";
@@ -30,6 +43,7 @@ interface DayViewProps {
   onSelectDate: (date: Date) => void;
   onBack: () => void;
   onSelectEvent: (event: CalendarEvent) => void;
+  onUpdateEventTimes?: (id: string, startIso: string, endIso: string) => void;
   onGridView?: () => void;
   transition?: DayViewTransition | null;
 }
@@ -162,6 +176,48 @@ function decideCommit(offsetPx: number, direction: 1 | -1, velocityPxPerMs: numb
   return progress > SWIPE_COMMIT_DISTANCE_RATIO;
 }
 
+/**
+ * On-grid move/resize edit, owned here (above the swipeable panes) rather than
+ * inside a single day's HourGrid, so a held event survives day-to-day swiping:
+ * the picked-up copy is a pinned overlay that stays put while the day grid
+ * slides beneath it (drag with one finger, swipe days with another). The ghost
+ * stays in whichever pane still shows the event's source day.
+ */
+interface EditSession {
+  event: CalendarEvent;
+  colorName: CalendarColorName;
+  /** The day the event currently belongs to (its ghost's day). */
+  sourceDate: Date;
+  /** Reference time the anchor rect maps to. */
+  origStartMin: number;
+  origEndMin: number;
+  /** Live dragged time. */
+  startMin: number;
+  endMin: number;
+  dragging: boolean;
+  /** Viewport rect of the block at pickup: anchorTop corresponds to origStartMin. */
+  anchorTop: number;
+  anchorLeft: number;
+  anchorWidth: number;
+}
+
+interface EditGesture {
+  kind: "move" | "resize-start" | "resize-end";
+  startClientY: number;
+  origStartMin: number;
+  origEndMin: number;
+  curStartMin: number;
+  curEndMin: number;
+}
+
+function overlayTopPx(edit: EditSession): number {
+  return edit.anchorTop + minutesToPx(edit.startMin - edit.origStartMin);
+}
+
+function overlayHeightPx(edit: EditSession): number {
+  return Math.max(MIN_EVENT_HEIGHT_PX, minutesToPx(edit.endMin - edit.startMin)) - EVENT_EDGE_GAP_PX * 2;
+}
+
 export function DayView({
   today,
   selectedDate,
@@ -171,6 +227,7 @@ export function DayView({
   onSelectDate,
   onBack,
   onSelectEvent,
+  onUpdateEventTimes,
   onGridView,
   transition = null,
 }: DayViewProps) {
@@ -217,6 +274,170 @@ export function DayView({
   const neighborPaneRef = useRef<HTMLDivElement>(null);
   const springCancelRef = useRef<(() => void) | null>(null);
   const dragRef = useRef<DragTrackState | null>(null);
+
+  // ---- On-grid edit (move/resize), owned above the panes for cross-day drag ----
+  const [edit, setEdit] = useState<EditSession | null>(null);
+  const editPointerRef = useRef<number | null>(null);
+  const editGestureRef = useRef<EditGesture | null>(null);
+
+  function captureEditPointer(pointerId: number) {
+    try {
+      swipeContainerRef.current?.setPointerCapture(pointerId);
+    } catch {
+      /* ignore */
+    }
+  }
+  function releaseEditPointer(pointerId: number) {
+    try {
+      swipeContainerRef.current?.releasePointerCapture(pointerId);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function applyEditDrag(g: EditGesture, deltaMin: number) {
+    const duration = g.origEndMin - g.origStartMin;
+    let startMin = g.origStartMin;
+    let endMin = g.origEndMin;
+    if (g.kind === "move") {
+      startMin = clamp(g.origStartMin + deltaMin, 0, MINUTES_IN_DAY - duration);
+      endMin = startMin + duration;
+    } else if (g.kind === "resize-start") {
+      startMin = clamp(g.origStartMin + deltaMin, 0, g.origEndMin - MIN_EVENT_DURATION_MIN);
+      endMin = g.origEndMin;
+    } else {
+      startMin = g.origStartMin;
+      endMin = clamp(g.origEndMin + deltaMin, g.origStartMin + MIN_EVENT_DURATION_MIN, MINUTES_IN_DAY);
+    }
+    g.curStartMin = startMin;
+    g.curEndMin = endMin;
+    setEdit((prev) => (prev ? { ...prev, startMin, endMin, dragging: true } : prev));
+  }
+
+  // Long-press on an event (reported up from HourGrid) → pick it up.
+  function handleEnterEdit(info: EventLongPressInfo) {
+    if (transition) return;
+    editPointerRef.current = info.pointerId;
+    editGestureRef.current = {
+      kind: "move",
+      startClientY: info.clientY,
+      origStartMin: info.origStartMin,
+      origEndMin: info.origEndMin,
+      curStartMin: info.origStartMin,
+      curEndMin: info.origEndMin,
+    };
+    // The same finger's initial press may have armed a swipe drag — drop it.
+    if (dragRef.current?.pointerId === info.pointerId) dragRef.current = null;
+    captureEditPointer(info.pointerId);
+    setEdit({
+      event: info.event,
+      colorName: info.colorName,
+      sourceDate: startOfDay(new Date(info.event.start)),
+      origStartMin: info.origStartMin,
+      origEndMin: info.origEndMin,
+      startMin: info.origStartMin,
+      endMin: info.origEndMin,
+      dragging: true,
+      anchorTop: info.rect.top,
+      anchorLeft: info.rect.left,
+      anchorWidth: info.rect.width,
+    });
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(8);
+  }
+
+  // Re-grab the resting picked-up copy to move it again (already in edit mode).
+  function handleOverlayPointerDown(e: ReactPointerEvent) {
+    if (!edit) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    if (editPointerRef.current !== null) return; // a finger is already dragging; let it bubble (swipe)
+    e.stopPropagation();
+    const top = overlayTopPx(edit);
+    editGestureRef.current = {
+      kind: "move",
+      startClientY: e.clientY,
+      origStartMin: edit.startMin,
+      origEndMin: edit.endMin,
+      curStartMin: edit.startMin,
+      curEndMin: edit.endMin,
+    };
+    editPointerRef.current = e.pointerId;
+    setEdit((prev) =>
+      prev ? { ...prev, dragging: true, origStartMin: prev.startMin, origEndMin: prev.endMin, anchorTop: top } : prev,
+    );
+    captureEditPointer(e.pointerId);
+  }
+
+  function handleResizeHandleDown(edge: ResizeEdge, e: ReactPointerEvent) {
+    if (!edit) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    if (editPointerRef.current !== null) return;
+    e.stopPropagation();
+    const top = overlayTopPx(edit);
+    editGestureRef.current = {
+      kind: edge === "start" ? "resize-start" : "resize-end",
+      startClientY: e.clientY,
+      origStartMin: edit.startMin,
+      origEndMin: edit.endMin,
+      curStartMin: edit.startMin,
+      curEndMin: edit.endMin,
+    };
+    editPointerRef.current = e.pointerId;
+    setEdit((prev) =>
+      prev ? { ...prev, dragging: true, origStartMin: prev.startMin, origEndMin: prev.endMin, anchorTop: top } : prev,
+    );
+    captureEditPointer(e.pointerId);
+  }
+
+  function handleEditMove(e: ReactPointerEvent) {
+    const g = editGestureRef.current;
+    if (!g) return;
+    applyEditDrag(g, snapMinutes(pxToMinutes(e.clientY - g.startClientY)));
+  }
+
+  function commitEdit(e: ReactPointerEvent) {
+    const g = editGestureRef.current;
+    editGestureRef.current = null;
+    editPointerRef.current = null;
+    releaseEditPointer(e.pointerId);
+    if (!g || !edit) return;
+    const { curStartMin: startMin, curEndMin: endMin } = g;
+    // Drop onto whatever day is showing now (a finger-B swipe may have changed it).
+    const targetDate = selectedDate;
+    setEdit((prev) =>
+      prev
+        ? {
+            ...prev,
+            dragging: false,
+            sourceDate: targetDate,
+            origStartMin: startMin,
+            origEndMin: endMin,
+            startMin,
+            endMin,
+            anchorTop: overlayTopPx(prev),
+          }
+        : prev,
+    );
+    const startIso = minutesToLocalIso(targetDate, startMin);
+    const endIso = minutesToLocalIso(targetDate, endMin);
+    const current = events.find((ev) => ev.id === edit.event.id);
+    if (!current || current.start !== startIso || current.end !== endIso) {
+      onUpdateEventTimes?.(edit.event.id, startIso, endIso);
+    }
+  }
+
+  function cancelEdit(e: ReactPointerEvent) {
+    editGestureRef.current = null;
+    editPointerRef.current = null;
+    releaseEditPointer(e.pointerId);
+    setEdit((prev) =>
+      prev ? { ...prev, startMin: prev.origStartMin, endMin: prev.origEndMin, dragging: false } : prev,
+    );
+  }
+
+  function exitEdit() {
+    if (editGestureRef.current) return; // don't drop out mid-drag
+    setEdit(null);
+  }
 
   // The mini week strip's selected-day indicator shouldn't wait for
   // onSelectDate (which only fires once the settle animation finishes) —
@@ -375,6 +596,10 @@ export function DayView({
   }
 
   function handlePointerMove(e: ReactPointerEvent) {
+    if (editPointerRef.current === e.pointerId) {
+      handleEditMove(e);
+      return;
+    }
     const d = dragRef.current;
     if (!d || d.pointerId !== e.pointerId) return;
     const dx = e.clientX - d.startX;
@@ -405,6 +630,10 @@ export function DayView({
   }
 
   function handlePointerUp(e: ReactPointerEvent) {
+    if (editPointerRef.current === e.pointerId) {
+      commitEdit(e);
+      return;
+    }
     const d = dragRef.current;
     dragRef.current = null;
     if (!d || d.pointerId !== e.pointerId || d.locked !== "x" || d.direction === null) return;
@@ -416,6 +645,10 @@ export function DayView({
   }
 
   function handlePointerCancel(e: ReactPointerEvent) {
+    if (editPointerRef.current === e.pointerId) {
+      cancelEdit(e);
+      return;
+    }
     const d = dragRef.current;
     dragRef.current = null;
     if (!d || d.pointerId !== e.pointerId || d.locked !== "x" || d.direction === null) return;
@@ -423,6 +656,30 @@ export function DayView({
   }
 
   const miniStripDate = swipe && swipeCrossedMidpoint ? swipe.neighborDate : selectedDate;
+
+  // Which pane (if any) currently shows the edited event's source day — that
+  // pane hides the event's normal block and renders the dimmed ghost.
+  const baseIsSource = !!edit && isSameDay(selectedDate, edit.sourceDate);
+  const baseEditingId = baseIsSource ? edit!.event.id : null;
+  const baseGhost = baseIsSource && edit!.dragging ? { startMin: edit!.origStartMin, endMin: edit!.origEndMin } : null;
+  const neighborDate = swipe?.neighborDate ?? null;
+  const neighborIsSource = !!edit && !!neighborDate && isSameDay(neighborDate, edit.sourceDate);
+  const neighborEditingId = neighborIsSource ? edit!.event.id : null;
+  const neighborGhost = neighborIsSource && edit!.dragging ? { startMin: edit!.origStartMin, endMin: edit!.origEndMin } : null;
+
+  // Quarter-hour gutter ticks, only during an active drag, around the hours the
+  // moving edges sit in — pinned to the overlay's coordinate frame.
+  const editTicks =
+    edit && edit.dragging
+      ? Array.from(new Set([Math.floor(edit.startMin / 60), Math.floor(edit.endMin / 60)]))
+          .filter((h) => h >= 0 && h < 24)
+          .flatMap((h) =>
+            [15, 30, 45]
+              .map((m) => h * 60 + m)
+              .filter((min) => min < MINUTES_IN_DAY)
+              .map((min) => ({ min, label: `:${min % 60}`, y: edit.anchorTop + minutesToPx(min - edit.origStartMin) })),
+          )
+      : [];
 
   const chromeIsOff = transition ? (transition.mode === "exit" ? transition.armed : !transition.armed) : false;
   const chromeStyle = transition
@@ -433,8 +690,11 @@ export function DayView({
     <div className={`fixed inset-0 overflow-hidden ${transition ? "pointer-events-none" : ""}`}>
       <div
         ref={swipeContainerRef}
-        className="pointer-events-auto absolute inset-0"
-        style={{ touchAction: "pan-y" }}
+        data-day-swipe
+        className={`pointer-events-auto absolute inset-0 ${edit ? "select-none" : ""}`}
+        // During an edit, lock native scrolling so one finger retimes and a
+        // second can still drive the JS day-swipe.
+        style={{ touchAction: edit ? "none" : "pan-y" }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -448,6 +708,9 @@ export function DayView({
             reminders={reminders}
             calendarsById={calendarsById}
             onSelectEvent={onSelectEvent}
+            editingEventId={baseEditingId}
+            ghost={baseGhost}
+            onEventLongPress={handleEnterEdit}
             topOffset={headerHeight}
             verticalTransition={
               transition
@@ -470,10 +733,67 @@ export function DayView({
               reminders={reminders}
               calendarsById={calendarsById}
               onSelectEvent={onSelectEvent}
+              editingEventId={neighborEditingId}
+              ghost={neighborGhost}
+              onEventLongPress={handleEnterEdit}
               topOffset={headerHeight}
               verticalTransition={null}
             />
           </div>
+        )}
+
+        {edit && (
+          <>
+            {/* Tap-away layer (only at rest, so a second finger can swipe mid-drag). */}
+            {!edit.dragging && (
+              <div
+                className="absolute inset-0 z-[15]"
+                style={{ touchAction: "none" }}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  exitEdit();
+                }}
+              />
+            )}
+
+            {/* Quarter-hour gutter ticks, pinned to the overlay frame. */}
+            {editTicks.map((t) => (
+              <span
+                key={t.min}
+                className="pointer-events-none absolute z-[31] -translate-y-1/2 text-right text-[10px] font-medium text-black/40 dark:text-white/50"
+                style={{ top: t.y, left: edit.anchorLeft - 46, width: 40 }}
+              >
+                {t.label}
+              </span>
+            ))}
+
+            {/* The pinned picked-up copy: stays put while days slide underneath. */}
+            <div
+              className="absolute z-30"
+              style={{
+                top: overlayTopPx(edit),
+                left: edit.anchorLeft,
+                width: edit.anchorWidth,
+                height: overlayHeightPx(edit),
+                touchAction: "none",
+                cursor: "grab",
+              }}
+              onPointerDown={handleOverlayPointerDown}
+            >
+              <EventBlockBody
+                event={{
+                  ...edit.event,
+                  start: minutesToLocalIso(edit.sourceDate, edit.startMin),
+                  end: minutesToLocalIso(edit.sourceDate, edit.endMin),
+                }}
+                colorName={edit.colorName}
+                variant="solid"
+                heightPx={overlayHeightPx(edit)}
+                editing
+                onResizeHandleDown={handleResizeHandleDown}
+              />
+            </div>
+          </>
         )}
       </div>
 
