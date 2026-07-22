@@ -1,33 +1,24 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-} from "react";
+import { useMemo, useState } from "react";
+import LiquidContainer, {
+  type LiquidItem,
+  type LiquidTheme,
+} from "./LiquidContainer";
 
 /* ------------------------------------------------------------------ *
  * Liquid-glass mitosis button
  *
- * The "blurred SVG trick": render solid shapes, blur them heavily with
- * feGaussianBlur so their soft edges bleed into each other, then run the
- * result through an feColorMatrix that cranks the alpha channel's contrast.
- * The blur turns two nearby circles into one continuous smear of
- * translucent alpha; the color matrix re-hardens that smear back into a
- * crisp silhouette. Where the blurs overlapped you get a smooth "goo"
- * bridge — a metaball. Pull the shapes apart and the bridge thins until
- * the alpha in the gap drops below the matrix threshold and it snaps.
- *
- * Here we drive that with a single interactive control: one circle that,
- * on tap, elongates and pinches into two circles of the *same* radius —
- * cell mitosis — each becoming its own button.
+ * The goo effect itself now lives in <LiquidContainer>: hand it the list of
+ * buttons that should be present and it fuses/splits them with the blurred-
+ * SVG metaball trick. This page is just a consumer — it decides *which*
+ * blobs exist (one "+" when closed; Event + Reminder when open) and the
+ * container animates the transition between those sets.
  * ------------------------------------------------------------------ */
 
-type Theme = { name: string; from: string; to: string; glow: string };
+type NamedTheme = LiquidTheme & { name: string };
 
-const THEMES: Theme[] = [
+const THEMES: NamedTheme[] = [
   { name: "Sunset", from: "#ff8a3d", to: "#ff2d78", glow: "#ff5c7a" },
   { name: "Ocean", from: "#3dd6ff", to: "#4d7cff", glow: "#5aa8ff" },
   { name: "Lime", from: "#c6ff4d", to: "#18d47a", glow: "#7bff8a" },
@@ -54,6 +45,8 @@ export default function MetaballPage() {
             A single liquid-glass circle that splits into two of the same size —
             like a dividing cell. Tap it and the goo bridge stretches, thins, then
             snaps into two independent buttons. Tap either choice to merge back.
+            The goo surface is a reusable <code>&lt;LiquidContainer&gt;</code>; this
+            page just controls which buttons live inside it.
           </p>
         </header>
 
@@ -81,40 +74,127 @@ export default function MetaballPage() {
             setThemeIdx={setThemeIdx}
           />
         </div>
+
+        <section className="mt-2 flex flex-col gap-3 border-t border-white/10 pt-8">
+          <div className="flex flex-col gap-1">
+            <h2 className="text-xl font-semibold tracking-tight">Liquid chips</h2>
+            <p className="max-w-2xl text-sm leading-relaxed text-white/55">
+              The same <code>&lt;LiquidContainer&gt;</code> holding an arbitrary,
+              changing set of blobs — including pill-shaped <em>text</em> buttons.
+              Tap a chip to drop it (it melts back into the row); tap the{" "}
+              <span className="text-white/80">+</span> to grow the next one in. The
+              row re-packs and re-centres itself as the set changes.
+            </p>
+          </div>
+          <LiquidChips theme={theme} showOutlines={showOutlines} />
+        </section>
       </div>
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ *
- * The mitosis stage.
+ * Second demo: an arbitrary, changing set of pill/text buttons.
  *
- * Two circles of equal radius R sit on a shared horizontal axis. A single
- * progress value `t` in [0, 1] drives everything:
- *   t = 0  → both centres coincide → one circle (the parent cell).
- *   t = 1  → centres are SPLIT apart → two distinct circles (daughters).
- * The goo filter keeps them fused across the middle of that journey, so
- * the visible shape morphs peanut → dumbbell → pinch → two circles.
+ * This is the same container as above; the only difference is the items —
+ * text pills instead of icon circles, and a count that the user drives up
+ * and down. Nothing about the container is toolbar- or chip-specific.
  * ------------------------------------------------------------------ */
 
-const VB_W = 460;
-const VB_H = 280;
-const CX = VB_W / 2;
-const CY = VB_H / 2 - 4;
-const R = 46;
-// Centre separation at full split: two radii plus a clean gap between edges.
-const SPLIT = 2 * R + 40;
+const CHIP_POOL: { id: string; label: string }[] = [
+  { id: "today", label: "Today" },
+  { id: "week", label: "This week" },
+  { id: "month", label: "This month" },
+  { id: "someday", label: "Someday" },
+  { id: "flagged", label: "Flagged" },
+];
 
-// Overshoots past 1 mid-flight so the daughters fling apart, then settle.
-const easeOutBack = (p: number) => {
-  const c1 = 1.70158;
-  const c3 = c1 + 1;
-  return 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2);
-};
-const easeInOutCubic = (p: number) =>
-  p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+function LiquidChips({
+  theme,
+  showOutlines,
+}: {
+  theme: LiquidTheme;
+  showOutlines: boolean;
+}) {
+  const [active, setActive] = useState<string[]>(["today", "week", "month"]);
 
-const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+  const items = useMemo<LiquidItem[]>(() => {
+    const inactive = CHIP_POOL.filter((c) => !active.includes(c.id));
+    const chips: LiquidItem[] = active.map((id) => {
+      const chip = CHIP_POOL.find((c) => c.id === id)!;
+      return {
+        id: chip.id,
+        text: chip.label,
+        onClick: () => setActive((a) => a.filter((x) => x !== id)),
+      };
+    });
+    // A circular "+" that grows the next inactive chip into the row.
+    if (inactive.length > 0) {
+      chips.push({
+        id: "add",
+        icon: () => <PlusIcon />,
+        onClick: () => setActive((a) => [...a, inactive[0].id]),
+      });
+    }
+    return chips;
+  }, [active]);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div
+        className="rounded-2xl p-px"
+        style={{
+          background:
+            "linear-gradient(160deg, rgba(255,255,255,0.16), rgba(255,255,255,0.02) 40%, rgba(255,255,255,0.08))",
+        }}
+      >
+        <LiquidContainer
+          items={items}
+          theme={theme}
+          radius={28}
+          // Wide rest gap keeps settled chips as separate pills; the extra
+          // swell + the travel of a growing/melting chip still bridges the goo
+          // mid-transition.
+          gap={40}
+          blur={10}
+          contrast={22}
+          threshold={9}
+          swell={0.26}
+          width={760}
+          height={150}
+          showOutlines={showOutlines}
+          className="w-full touch-none select-none rounded-2xl"
+          style={{
+            background:
+              "radial-gradient(120% 120% at 50% 0%, #12131c 0%, #05060a 70%)",
+          }}
+        />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <button
+          onClick={() => setActive(CHIP_POOL.map((c) => c.id))}
+          className="rounded-lg bg-white/[0.07] px-3 py-1.5 font-medium text-white/80 transition hover:bg-white/[0.12]"
+        >
+          Fill all
+        </button>
+        <button
+          onClick={() => setActive([])}
+          className="rounded-lg bg-white/[0.07] px-3 py-1.5 font-medium text-white/80 transition hover:bg-white/[0.12]"
+        >
+          Clear
+        </button>
+        <span className="text-white/40">
+          {active.length} of {CHIP_POOL.length} chips
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * The mitosis demo, expressed purely as "which items are present".
+ * ------------------------------------------------------------------ */
 
 type Choice = "event" | "reminder";
 
@@ -129,68 +209,46 @@ function MitosisButton({
   contrast: number;
   threshold: number;
   showOutlines: boolean;
-  theme: Theme;
+  theme: LiquidTheme;
 }) {
-  const uid = useId().replace(/[:]/g, "");
-  const gooId = `goo-${uid}`;
-  const gradId = `grad-${uid}`;
-  const sheenId = `sheen-${uid}`;
-
   const [open, setOpen] = useState(false);
   const [choice, setChoice] = useState<Choice | null>(null);
-
-  // `t` is animated imperatively; tRef holds the live value so a new
-  // toggle can spring from wherever the last one left off.
-  const [t, setT] = useState(0);
-  const tRef = useRef(0);
-  const rafRef = useRef<number | null>(null);
-
-  const runTo = useCallback((to: number) => {
-    const from = tRef.current;
-    const opening = to > from;
-    const start = performance.now();
-    const dur = opening ? 640 : 440;
-    const ease = opening ? easeOutBack : easeInOutCubic;
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    const step = (now: number) => {
-      const p = Math.min(1, (now - start) / dur);
-      const v = from + (to - from) * ease(p);
-      tRef.current = v;
-      setT(v);
-      if (p < 1) rafRef.current = requestAnimationFrame(step);
-    };
-    rafRef.current = requestAnimationFrame(step);
-  }, []);
-
-  useEffect(() => {
-    runTo(open ? 1 : 0);
-  }, [open, runTo]);
-
-  useEffect(
-    () => () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    },
-    [],
-  );
-
-  const sep = SPLIT * Math.max(0, t);
-  const leftX = CX - sep / 2;
-  const rightX = CX + sep / 2;
-
-  // Swell the cells mid-flight: a bump that's 0 at rest (t=0 and t=1) and
-  // peaks around the pinch/merge point, so the buttons scale up while the
-  // split or join is in motion, then settle back to their resting radius.
-  const bump = Math.sin(Math.PI * clamp01(t));
-  const Rr = R * (1 + 0.2 * bump);
-
-  // Cross-fade the parent's "+" out as the daughters' icons fade in.
-  const plusOpacity = clamp01(1 - t * 2.2);
-  const optionOpacity = clamp01((t - 0.45) / 0.55);
 
   const select = (kind: Choice) => {
     setChoice(kind);
     setOpen(false);
   };
+
+  // Closed → one "+" cell. Open → two daughter cells. Swapping the array is
+  // all it takes; the container tweens the split/merge.
+  const items = useMemo<LiquidItem[]>(() => {
+    if (!open) {
+      return [
+        {
+          id: "seed",
+          icon: () => <PlusIcon />,
+          onClick: () => {
+            setChoice(null);
+            setOpen(true);
+          },
+        },
+      ];
+    }
+    return [
+      {
+        id: "event",
+        icon: () => <CalendarIcon />,
+        label: "Event",
+        onClick: () => select("event"),
+      },
+      {
+        id: "reminder",
+        icon: () => <ClockIcon />,
+        label: "Reminder",
+        onClick: () => select("reminder"),
+      },
+    ];
+  }, [open]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -201,177 +259,20 @@ function MitosisButton({
             "linear-gradient(160deg, rgba(255,255,255,0.16), rgba(255,255,255,0.02) 40%, rgba(255,255,255,0.08))",
         }}
       >
-        <svg
-          viewBox={`0 0 ${VB_W} ${VB_H}`}
+        <LiquidContainer
+          items={items}
+          theme={theme}
+          blur={blur}
+          contrast={contrast}
+          threshold={threshold}
+          showOutlines={showOutlines}
+          onBackdrop={open ? () => setOpen(false) : undefined}
           className="w-full touch-none select-none rounded-2xl"
           style={{
             background:
               "radial-gradient(120% 120% at 50% 0%, #12131c 0%, #05060a 70%)",
           }}
-        >
-          <defs>
-            <linearGradient id={gradId} x1="0" y1="0" x2="0.6" y2="1">
-              <stop offset="0%" stopColor={theme.from} />
-              <stop offset="100%" stopColor={theme.to} />
-            </linearGradient>
-            <radialGradient id={sheenId} cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stopColor="#ffffff" stopOpacity={0.9} />
-              <stop offset="100%" stopColor="#ffffff" stopOpacity={0} />
-            </radialGradient>
-            <filter id={gooId} x="-40%" y="-40%" width="180%" height="180%">
-              <feGaussianBlur in="SourceGraphic" stdDeviation={blur} result="blur" />
-              <feColorMatrix
-                in="blur"
-                type="matrix"
-                values={`1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 ${contrast} ${-threshold}`}
-                result="goo"
-              />
-              {/* Paint the crisp source back on top so centres stay saturated. */}
-              <feComposite in="SourceGraphic" in2="goo" operator="atop" result="sharp" />
-              {/* Soft coloured halo — the "glass" glow. */}
-              <feDropShadow
-                in="sharp"
-                dx="0"
-                dy="0"
-                stdDeviation="7"
-                floodColor={theme.glow}
-                floodOpacity={0.5}
-              />
-            </filter>
-          </defs>
-
-          {/* Background — tap outside an open button to merge back. */}
-          <rect
-            x={0}
-            y={0}
-            width={VB_W}
-            height={VB_H}
-            fill="transparent"
-            onPointerDown={open ? () => setOpen(false) : undefined}
-          />
-
-          {/* The gooey body: two equal circles fused by the filter. */}
-          <g filter={`url(#${gooId})`}>
-            <circle cx={leftX} cy={CY} r={Rr} fill={`url(#${gradId})`} />
-            <circle cx={rightX} cy={CY} r={Rr} fill={`url(#${gradId})`} />
-          </g>
-
-          {/* Crisp glass sheen, drawn on top so the blur doesn't smear it. */}
-          <g pointerEvents="none">
-            <ellipse
-              cx={leftX}
-              cy={CY - Rr * 0.42}
-              rx={Rr * 0.52}
-              ry={Rr * 0.3}
-              fill={`url(#${sheenId})`}
-              opacity={0.55}
-            />
-            <ellipse
-              cx={rightX}
-              cy={CY - Rr * 0.42}
-              rx={Rr * 0.52}
-              ry={Rr * 0.3}
-              fill={`url(#${sheenId})`}
-              opacity={0.55}
-            />
-          </g>
-
-          {/* Icons. Parent "+" cross-fades into the two daughter glyphs. */}
-          <g pointerEvents="none">
-            <g
-              transform={`translate(${CX}, ${CY}) rotate(${t * 45}) scale(${1 - t * 0.25})`}
-              opacity={plusOpacity}
-            >
-              <PlusIcon />
-            </g>
-
-            <g
-              transform={`translate(${leftX}, ${CY}) scale(${0.6 + 0.4 * optionOpacity})`}
-              opacity={optionOpacity}
-            >
-              <CalendarIcon />
-            </g>
-            <g
-              transform={`translate(${rightX}, ${CY}) scale(${0.6 + 0.4 * optionOpacity})`}
-              opacity={optionOpacity}
-            >
-              <ClockIcon />
-            </g>
-
-            {/* Labels under the daughters. */}
-            <text
-              x={leftX}
-              y={CY + Rr + 26}
-              textAnchor="middle"
-              fill="#ffffff"
-              opacity={optionOpacity * 0.75}
-              fontSize={13}
-              fontWeight={500}
-            >
-              Event
-            </text>
-            <text
-              x={rightX}
-              y={CY + Rr + 26}
-              textAnchor="middle"
-              fill="#ffffff"
-              opacity={optionOpacity * 0.75}
-              fontSize={13}
-              fontWeight={500}
-            >
-              Reminder
-            </text>
-          </g>
-
-          {/* True geometry overlay for debugging the pinch point. */}
-          {showOutlines && (
-            <g fill="none" stroke={theme.glow} strokeOpacity={0.6} strokeDasharray="4 4">
-              <circle cx={leftX} cy={CY} r={Rr} />
-              <circle cx={rightX} cy={CY} r={Rr} />
-            </g>
-          )}
-
-          {/* Hit targets, crisp and on top so taps land precisely. */}
-          {open ? (
-            <g>
-              <circle
-                cx={leftX}
-                cy={CY}
-                r={Rr}
-                fill="transparent"
-                style={{ cursor: "pointer" }}
-                onPointerDown={(e) => {
-                  e.stopPropagation();
-                  select("event");
-                }}
-              />
-              <circle
-                cx={rightX}
-                cy={CY}
-                r={Rr}
-                fill="transparent"
-                style={{ cursor: "pointer" }}
-                onPointerDown={(e) => {
-                  e.stopPropagation();
-                  select("reminder");
-                }}
-              />
-            </g>
-          ) : (
-            <circle
-              cx={CX}
-              cy={CY}
-              r={Rr}
-              fill="transparent"
-              style={{ cursor: "pointer" }}
-              onPointerDown={(e) => {
-                e.stopPropagation();
-                setChoice(null);
-                setOpen(true);
-              }}
-            />
-          )}
-        </svg>
+        />
       </div>
 
       <div className="flex flex-wrap items-center gap-3 text-sm">
