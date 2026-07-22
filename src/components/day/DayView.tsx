@@ -280,6 +280,24 @@ export function DayView({
   const editPointerRef = useRef<number | null>(null);
   const editGestureRef = useRef<EditGesture | null>(null);
 
+  // The browser latches a touch's scroll intent at touchstart from the
+  // then-current touch-action (pan-y). By the time the long-press fires and we
+  // set touch-action:none, that decision is already made, so the pane would
+  // keep native-scrolling under the pinned copy — dragging the event the wrong
+  // way. A non-passive touchmove listener cancels that in-progress scroll while
+  // an edit drag is live (the long-press only fires with a still finger, so no
+  // scroll has started yet at that point). React's own listeners are passive,
+  // hence this manual one.
+  useEffect(() => {
+    const el = swipeContainerRef.current;
+    if (!el) return;
+    const onTouchMove = (e: TouchEvent) => {
+      if (editPointerRef.current !== null) e.preventDefault();
+    };
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => el.removeEventListener("touchmove", onTouchMove);
+  }, []);
+
   function captureEditPointer(pointerId: number) {
     try {
       swipeContainerRef.current?.setPointerCapture(pointerId);
