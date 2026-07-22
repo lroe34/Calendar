@@ -815,7 +815,7 @@ export function DayView({
         )}
       </div>
 
-      <div ref={headerRef} className="absolute inset-x-0 top-0 z-20">
+      <div ref={headerRef} className="absolute inset-x-0 top-0 z-20 select-none">
         {/* Pinned chrome: nav band + mini strip only. Day heading / all-day
             lane now live inside each swipeable DayContentPane so they slide
             with the hour grid instead of snapping. */}
@@ -832,11 +832,11 @@ export function DayView({
         </div>
       </div>
 
-      <div className="absolute inset-x-0 top-0 z-40" style={chromeStyle}>
+      <div className="absolute inset-x-0 top-0 z-40 select-none" style={chromeStyle}>
         <TopNavBar backLabel={MONTH_NAMES[selectedDate.getMonth()].slice(0, 3)} onBack={onBack} />
       </div>
 
-      <div className="absolute inset-x-0 bottom-0 z-40" style={chromeStyle}>
+      <div className="absolute inset-x-0 bottom-0 z-40 select-none" style={chromeStyle}>
         <BottomBar onToday={() => navigateTo(today)} onGridView={onGridView} />
       </div>
     </div>
