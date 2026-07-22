@@ -378,31 +378,48 @@ export default function LiquidContainer({
           const item = items.find((i) => i.id === b.id) ?? b.item;
           const { rad } = sizeOf(b);
           const s = clamp01(b.s);
+          // While a blob is growing in or shrinking out, its glyph/text is
+          // small, translucent *and* blurred, sharpening only as the blob
+          // settles. Peaks at the moment of appearance/disappearance (s→0) and
+          // clears to 0 at rest (s→1) — giving a soft focus-pull in/out that
+          // reads the same whether the blob is being born or dying.
+          const contentBlur = (1 - s) * 6; // px
+          const blurStyle =
+            contentBlur > 0.05
+              ? { filter: `blur(${contentBlur.toFixed(2)}px)` }
+              : undefined;
+          // Text only starts to reveal once the pill is mostly grown, so it
+          // doesn't overflow the still-small body mid-transition.
+          const textReveal = clamp01((b.s - 0.45) / 0.55);
           return (
             <g key={b.id}>
               {item.icon && (
                 <g
-                  transform={`translate(${b.x}, ${CY}) scale(${0.6 + 0.4 * s})`}
+                  transform={`translate(${b.x}, ${CY}) scale(${0.4 + 0.6 * s})`}
                   opacity={s}
+                  style={blurStyle}
                 >
                   {item.icon(s)}
                 </g>
               )}
               {item.text && (
-                <text
-                  x={b.x}
-                  y={CY}
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                  fill="#ffffff"
-                  // Fade the label in only once the pill is mostly grown, so it
-                  // doesn't overflow the still-small body mid-transition.
-                  opacity={clamp01((b.s - 0.45) / 0.55)}
-                  fontSize={PILL_FONT}
-                  fontWeight={600}
+                <g
+                  transform={`translate(${b.x}, ${CY}) scale(${0.6 + 0.4 * textReveal}) translate(${-b.x}, ${-CY})`}
+                  opacity={textReveal}
+                  style={blurStyle}
                 >
-                  {item.text}
-                </text>
+                  <text
+                    x={b.x}
+                    y={CY}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fill="#ffffff"
+                    fontSize={PILL_FONT}
+                    fontWeight={600}
+                  >
+                    {item.text}
+                  </text>
+                </g>
               )}
               {item.label && (
                 <text
