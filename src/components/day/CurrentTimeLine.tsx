@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { minutesToPx } from "@/lib/day-grid";
 import { minutesSinceMidnight } from "@/lib/date-utils";
+import { useDayScale } from "./DayScaleContext";
 
 const GUTTER_WIDTH_PX = 52;
 
 export function CurrentTimeLine() {
+  const { minutesToPx } = useDayScale();
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {

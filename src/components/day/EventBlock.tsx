@@ -1,3 +1,5 @@
+"use client";
+
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { CalendarEvent } from "@/lib/types";
 import { CALENDAR_COLORS } from "@/lib/colors";
@@ -5,9 +7,9 @@ import {
   DETAIL_DISCLOSURE_THRESHOLD_PX,
   EVENT_EDGE_GAP_PX,
   MIN_EVENT_HEIGHT_PX,
-  minutesToPx,
 } from "@/lib/day-grid";
 import { formatEventTimeRange, minutesSinceMidnight } from "@/lib/date-utils";
+import { useDayScale } from "./DayScaleContext";
 import { ClockIcon, PinIcon, RepeatIcon } from "@/components/shared/Icons";
 
 export type ResizeEdge = "start" | "end";
@@ -48,6 +50,7 @@ export function EventBlock({
   onClick,
   onPointerDown,
 }: EventBlockProps) {
+  const { minutesToPx } = useDayScale();
   const start = new Date(event.start);
   const end = new Date(event.end);
   const top = minutesToPx(minutesSinceMidnight(start)) + EVENT_EDGE_GAP_PX;
