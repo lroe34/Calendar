@@ -231,8 +231,9 @@ Day view hour grid") — see the updated §6.2.
   detail sheet §3.6, and distinct from the sheet's "Edit" button). iOS convention pairs
   this with a haptic "pop" on pickup — approximate per §6.2's haptics note.
 - **Drag the body to reschedule**: moving the picked-up block up/down retimes the event,
-  keeping its duration fixed. (Whether horizontal drag can move it across days is not
-  shown in this single-day crop — treat cross-day drag as an open question, §3.5.8.)
+  keeping its duration fixed. To move it to **another day**, hold it with one finger and
+  swipe the day grid with a second finger — the held copy stays pinned while the day slides
+  beneath it, and releasing drops it on the day now showing (implemented — see §3.5.6/§3.5.7).
 - **Resize via the two handles**: the **top-right handle adjusts the start time** (drags
   the top edge), the **bottom-left handle adjusts the end time** (drags the bottom edge),
   each independently, with the opposite edge pinned. Enforce the same
@@ -283,24 +284,36 @@ Day view hour grid") — see the updated §6.2.
 
 ### 3.5.6 Where this goes in the repo (implementation surface)
 
-> **Status: implemented.** A first pass of this interaction now ships. What
-> landed, and where:
+> **Status: implemented, including cross-day drag.** What landed, and where:
 > - `src/lib/day-grid.ts` — `SNAP_MINUTES`/`MIN_EVENT_DURATION_MIN`/`LONG_PRESS_MS`
 >   constants plus `pxToMinutes`, `snapMinutes`, `clamp`, and `minutesToLocalIso`.
-> - `src/components/day/EventBlock.tsx` — `ghost`, `editing`, and `zIndexOverride`
->   props; the two diagonal resize handles (rendered outside the fill's
->   `overflow-hidden` so they can straddle the edge); pointer hooks.
-> - `src/components/day/HourGrid.tsx` — owns the edit state machine: long-press to
->   enter, body-drag to move, handle-drag to resize, snapped to 15 min, with the
->   ghost/picked-up copies and the drag-gated quarter-hour gutter ticks. A
->   tap-away backdrop exits edit mode.
-> - `CalendarApp` → `DayView` → `DayContentPane` thread a single
->   `onUpdateEventTimes(id, startIso, endIso)` action that writes the new
->   start/end back into event state (the same path the detail-sheet edit will use).
+> - `src/components/day/EventBlock.tsx` — split into a positioned `EventBlock`
+>   wrapper and a reusable `EventBlockBody` (accent capsule + fill + text +
+>   resize handles). The pinned picked-up copy renders `EventBlockBody` directly;
+>   the ghost renders `EventBlock` with `ghost`.
+> - `src/components/day/HourGrid.tsx` — detects the long-press on an event and
+>   reports it up (with the block's viewport rect); renders the dimmed ghost at
+>   the event's resting time and hides the picked-up event's normal block. It no
+>   longer owns the drag.
+> - `src/components/day/DayView.tsx` — **owns the whole edit gesture**, lifted
+>   above the swipeable panes so a held event survives day-to-day swiping. The
+>   picked-up copy is a **pinned overlay** (fixed in the viewport) that stays put
+>   while the day grid slides beneath it; long-press to enter, one finger retimes
+>   (move/resize, 15-min snap), a **second finger swipes to another day** (the
+>   normal day-swipe runs concurrently, keyed to its own pointer). Releasing the
+>   held finger drops the event onto whatever day is now showing. The quarter-hour
+>   gutter ticks are pinned to the overlay's frame; a rest-only tap-away layer
+>   exits (absent mid-drag so the second finger can still swipe).
+> - `CalendarApp` → `DayView` thread one `onUpdateEventTimes(id, startIso, endIso)`
+>   action; the ISO carries the target day, so a cross-day drop just re-dates the
+>   event. **Neighbors re-layout on commit, not live during the drag** — the ghost
+>   holds the old slot open until release (the layout still counts the event at its
+>   resting time until the write lands).
 >
-> Deferred from this pass (still open): cross-day drag, live neighbor re-layout
-> during a drag, the recurring "this / all future events" prompt on commit, and
-> the pickup/snap-back *motion* polish (§3.5.7). Handles show for mouse/touch;
+> Deferred (still open): the recurring "this / all future events" prompt on
+> commit, and pickup/snap-back *motion* polish (§3.5.7). Cross-day pixel alignment
+> of the pinned copy against a differently-scrolled target day is a known v1
+> imperfection (the committed time is always exact). Handles show for mouse/touch;
 > haptics are a best-effort `navigator.vibrate`.
 
 Original plan (for reference) — landing this touches:
@@ -335,17 +348,21 @@ Original plan (for reference) — landing this touches:
 ### 3.5.7 Open questions
 
 - The **green left-edge accent** — real edit indicator or a cropped adjacent event? (§3.5.1)
-- **Cross-day drag**: can the block be dragged to another day, and if so how (auto-scroll?
-  the mini week-strip? not possible in Day view at all)? Not shown in a single-day crop.
+- **Cross-day drag** — *resolved & implemented*: hold the event with one finger and swipe
+  to another day with a second finger; the held copy stays pinned while the day slides
+  underneath, and releasing drops it on the day now showing. (Single-finger auto-advance at
+  the screen edges was considered and not built — the two-finger gesture is the model.)
+- **Live overlap re-layout** — *resolved & implemented*: neighbors do **not** re-flow live;
+  a ghost holds the event's original slot during the drag and columns re-layout only on
+  commit. Both days re-flow — the source day reclaims the vacated slot, the target day makes
+  room.
 - **Snap increment**: 15 min assumed from the tick labels — confirm against the real app;
   iOS sometimes uses finer snapping with a magnifier/haptic detent.
 - **Which markers show**: all quarter-hours across the grid vs. only near the active edge
-  (§3.5.5).
-- **Commit vs. cancel** triggers and whether a **recurring** event (this one recurs) prompts
+  (§3.5.5). Currently: the hours the two moving edges sit in.
+- **Recurring commit prompt**: whether a **recurring** event (this one recurs) prompts
   "this event / all future events" on commit, the way the detail-sheet edit does in iOS.
-- **Live overlap re-layout**: as the dragged block moves over other events, do the
-  neighbors re-flow their columns live (§3.4 collision layout), or does re-layout only
-  happen on commit? Not provable from the still.
+  Not yet.
 - Entry/exit **motion** (pop-on-pickup scale, ghost fade-in, snap-back easing, haptics) —
   unconfirmed per §6.2 until we have a screen recording.
 
@@ -742,6 +759,11 @@ Concrete list of things that are easy to skip, approximate, or get subtly wrong:
       15-min snap; the gutter shows whole hours only at rest.
 - [x] Move/resize writes the event's new start/end through one shared "update event times"
       action reused by the detail-sheet edit mode — mock data can't stay static.
+- [x] Cross-day drag is two-finger: one finger holds the event (a viewport-pinned copy that
+      stays put while the day grid slides), a second finger swipes the day; release drops it
+      on the day now showing. The edit gesture lives above the panes so it survives the swap.
+- [x] Neighbors re-layout on commit, not live: the ghost holds the original slot open during
+      the drag; both the source and target day re-flow only once the drop lands.
 - [ ] All bars/blocks use per-calendar color pulled from the data model, never hardcoded
       per screen.
 - [ ] Event detail sheet is a true modal sheet (dimmed background peeking through, rounded

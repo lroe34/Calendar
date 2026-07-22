@@ -27,17 +27,15 @@ interface EventBlockProps {
   /** Dimmed, non-interactive placeholder showing where the event still rests
    * while a copy of it is being dragged (see the on-grid edit interaction). */
   ghost?: boolean;
-  /** Renders the two diagonal resize handles (top-right = start, bottom-left =
-   * end) and lifts the block above its neighbors. */
-  editing?: boolean;
   /** Explicit stacking order (used to sit the ghost above the exit-edit backdrop). */
   zIndexOverride?: number;
   onClick?: () => void;
   onPointerDown?: (e: ReactPointerEvent) => void;
-  /** Fired when one of the resize handles is grabbed. */
-  onResizeHandleDown?: (edge: ResizeEdge, e: ReactPointerEvent) => void;
 }
 
+/** Absolutely-positioned block on the Day hour grid, placed by its start/end
+ *  time and column slot. The picked-up copy during an on-grid edit reuses
+ *  {@link EventBlockBody} directly instead, positioned as a pinned overlay. */
 export function EventBlock({
   event,
   colorName,
@@ -46,11 +44,9 @@ export function EventBlock({
   nested = false,
   variant = "tint",
   ghost = false,
-  editing = false,
   zIndexOverride,
   onClick,
   onPointerDown,
-  onResizeHandleDown,
 }: EventBlockProps) {
   const start = new Date(event.start);
   const end = new Date(event.end);
@@ -61,9 +57,6 @@ export function EventBlock({
       minutesToPx(minutesSinceMidnight(end) - minutesSinceMidnight(start)),
     ) -
     EVENT_EDGE_GAP_PX * 2;
-  const color = CALENDAR_COLORS[colorName];
-  const showDetails = height >= DETAIL_DISCLOSURE_THRESHOLD_PX;
-  const isSolid = variant === "solid";
 
   return (
     <div
@@ -75,13 +68,51 @@ export function EventBlock({
         height,
         left: `calc(${leftPct}% + ${EVENT_EDGE_GAP_PX / 2}px)`,
         width: `calc(${widthPct}% - ${EVENT_EDGE_GAP_PX}px)`,
-        zIndex: editing ? 30 : (zIndexOverride ?? (nested ? 1 : undefined)),
+        zIndex: zIndexOverride ?? (nested ? 1 : undefined),
         opacity: ghost ? 0.4 : undefined,
         pointerEvents: ghost ? "none" : undefined,
-        touchAction: editing ? "none" : undefined,
-        cursor: editing ? "grabbing" : undefined,
       }}
     >
+      <EventBlockBody
+        event={event}
+        colorName={colorName}
+        variant={variant}
+        heightPx={height}
+        nested={nested}
+      />
+    </div>
+  );
+}
+
+interface EventBlockBodyProps {
+  event: CalendarEvent;
+  colorName: keyof typeof CALENDAR_COLORS;
+  variant?: "tint" | "solid";
+  /** Rendered height, used to decide whether the location/time detail lines show. */
+  heightPx: number;
+  nested?: boolean;
+  /** Renders the two diagonal resize handles (top-right = start, bottom-left = end). */
+  editing?: boolean;
+  onResizeHandleDown?: (edge: ResizeEdge, e: ReactPointerEvent) => void;
+}
+
+/** The visual fill of an event block — accent capsule, tint/solid fill, text,
+ *  and (while editing) the resize handles — filling whatever box wraps it. */
+export function EventBlockBody({
+  event,
+  colorName,
+  variant = "tint",
+  heightPx,
+  nested = false,
+  editing = false,
+  onResizeHandleDown,
+}: EventBlockBodyProps) {
+  const color = CALENDAR_COLORS[colorName];
+  const isSolid = variant === "solid";
+  const showDetails = heightPx >= DETAIL_DISCLOSURE_THRESHOLD_PX;
+
+  return (
+    <div className="relative h-full w-full">
       <div
         className="h-full w-full overflow-hidden rounded-[7px]"
         style={{
@@ -117,7 +148,9 @@ export function EventBlock({
               )}
               <div className="flex items-center gap-1 text-[11.5px] opacity-85">
                 <ClockIcon className="h-3 w-3 shrink-0" />
-                <span className="truncate">{formatEventTimeRange(start, end)}</span>
+                <span className="truncate">
+                  {formatEventTimeRange(new Date(event.start), new Date(event.end))}
+                </span>
               </div>
             </>
           )}
@@ -127,8 +160,7 @@ export function EventBlock({
       {editing && (
         <>
           {/* Diagonal handles: top-right adjusts the start, bottom-left the end.
-              Rendered outside the overflow-hidden fill so they can straddle the
-              block edge like the reference. */}
+              Rendered outside the overflow-hidden fill so they straddle the edge. */}
           <ResizeHandle edge="start" onResizeHandleDown={onResizeHandleDown} />
           <ResizeHandle edge="end" onResizeHandleDown={onResizeHandleDown} />
         </>
@@ -149,12 +181,8 @@ function ResizeHandle({
     <span
       role="button"
       aria-label={atStart ? "Adjust start time" : "Adjust end time"}
-      onPointerDown={(e) => {
-        // Keep the block's own move-drag from also starting.
-        e.stopPropagation();
-        onResizeHandleDown?.(edge, e);
-      }}
-      className="absolute h-[15px] w-[15px] rounded-full border border-black/10 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.3)]"
+      onPointerDown={(e) => onResizeHandleDown?.(edge, e)}
+      className="absolute z-10 h-[15px] w-[15px] rounded-full border border-black/10 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.3)]"
       style={{
         touchAction: "none",
         cursor: "ns-resize",

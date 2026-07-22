@@ -7,7 +7,7 @@ import { HOUR_HEIGHT_PX } from "@/lib/day-grid";
 import { TRANSITION_MS, TRANSITION_EASE } from "@/lib/transition-constants";
 import { DayHeading } from "./DayHeading";
 import { AllDayLane } from "./AllDayLane";
-import { HourGrid } from "./HourGrid";
+import { HourGrid, type EventLongPressInfo, type GhostSpec } from "./HourGrid";
 
 /** Vertical month-week &lt;-&gt; mini-strip transition, forwarded from DayView's
  *  own `transition` prop. Only ever set on the pane matching the live
@@ -25,7 +25,11 @@ interface DayContentPaneProps {
   reminders: Reminder[];
   calendarsById: Map<string, CalendarSource>;
   onSelectEvent: (event: CalendarEvent) => void;
-  onUpdateEventTimes?: (id: string, startIso: string, endIso: string) => void;
+  /** On-grid edit (move/resize) is owned by DayView; the pane just forwards
+   *  the long-press pickup and renders the ghost for its own day. */
+  editingEventId?: string | null;
+  ghost?: GhostSpec | null;
+  onEventLongPress?: (info: EventLongPressInfo) => void;
   /** Height of the pinned chrome (nav spacer + mini week strip) this pane sits below. */
   topOffset: number;
   verticalTransition?: DayPaneVerticalTransition | null;
@@ -38,7 +42,9 @@ export function DayContentPane({
   reminders,
   calendarsById,
   onSelectEvent,
-  onUpdateEventTimes,
+  editingEventId = null,
+  ghost = null,
+  onEventLongPress,
   topOffset,
   verticalTransition = null,
 }: DayContentPaneProps) {
@@ -226,7 +232,9 @@ export function DayContentPane({
           calendarsById={calendarsById}
           isToday={isToday}
           onSelectEvent={onSelectEvent}
-          onUpdateEventTimes={onUpdateEventTimes}
+          editingEventId={editingEventId}
+          ghost={ghost}
+          onEventLongPress={onEventLongPress}
         />
       </div>
 
