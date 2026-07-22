@@ -178,18 +178,26 @@ function ResizeHandle({
 }) {
   const atStart = edge === "start"; // top-right
   return (
+    // Transparent 32px hit area — enlarged so the handle is easy to grab —
+    // that centers the (unchanged) 12px visual dot exactly where it used to
+    // sit. The old dot straddled the edge (center at the block's top/bottom)
+    // and sat ~24px in from the left/right edge; the offsets below keep that
+    // center fixed as the hit area grows around it (16px = half of 32px).
     <span
       role="button"
       aria-label={atStart ? "Adjust start time" : "Adjust end time"}
       onPointerDown={(e) => onResizeHandleDown?.(edge, e)}
-      className="absolute z-10 h-[12px] w-[12px] rounded-full border border-black/10 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.3)]"
+      className="absolute z-10 flex h-[32px] w-[32px] items-center justify-center"
       style={{
         touchAction: "none",
         cursor: "ns-resize",
-        // Straddle the top/bottom edge vertically, but sit ~25px in from the
-        // left/right edges so the handles read closer to the block's middle.
-        ...(atStart ? { top: -6, right: 18 } : { bottom: -6, left: 18 }),
+        ...(atStart ? { top: -16, right: 8 } : { bottom: -16, left: 8 }),
       }}
-    />
+    >
+      <span
+        aria-hidden
+        className="h-[12px] w-[12px] rounded-full border border-black/10 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.3)]"
+      />
+    </span>
   );
 }
