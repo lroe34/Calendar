@@ -1,5 +1,10 @@
 export const HOUR_HEIGHT_PX = 64;
 export const PX_PER_MINUTE = HOUR_HEIGHT_PX / 60;
+/** Pinch-to-zoom bounds for the day-view hour grid. The rendered hour height
+ *  is a runtime value (see DayScaleContext) that the pinch gesture drives
+ *  between these; HOUR_HEIGHT_PX is its default/at-rest value. */
+export const MIN_HOUR_HEIGHT_PX = 32;
+export const MAX_HOUR_HEIGHT_PX = 200;
 export const MIN_EVENT_HEIGHT_PX = 22;
 /** Inset each timed event from its start/end so back-to-back blocks leave
  *  a gap for hour lines (and each other) to stay visible. */

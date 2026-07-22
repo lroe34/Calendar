@@ -3,10 +3,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CalendarEvent, CalendarSource, Reminder } from "@/lib/types";
 import { isSameDay } from "@/lib/date-utils";
-import { HOUR_HEIGHT_PX } from "@/lib/day-grid";
 import { TRANSITION_MS, TRANSITION_EASE } from "@/lib/transition-constants";
 import { DayHeading } from "./DayHeading";
 import { AllDayLane } from "./AllDayLane";
+import { useHourHeight } from "./DayScaleContext";
 import { HourGrid, type EventLongPressInfo, type GhostSpec } from "./HourGrid";
 
 /** Vertical month-week &lt;-&gt; mini-strip transition, forwarded from DayView's
@@ -58,6 +58,7 @@ export function DayContentPane({
   scrollContainerRef,
 }: DayContentPaneProps) {
   const isToday = isSameDay(date, today);
+  const hourHeight = useHourHeight();
 
   const allDayEvents = useMemo(
     () =>
@@ -93,7 +94,10 @@ export function DayContentPane({
     const container = scrollRef.current;
     if (!container) return;
     const scrollToMinutes = isToday ? new Date().getHours() * 60 + new Date().getMinutes() : 8 * 60;
-    const target = Math.max(0, (scrollToMinutes / 60) * HOUR_HEIGHT_PX - 120);
+    // Uses the current hour height (not the default) so a mid-zoom day change
+    // still lands at the right time; intentionally not a dep — zooming must not
+    // re-run this and yank the scroll position.
+    const target = Math.max(0, (scrollToMinutes / 60) * hourHeight - 120);
     container.scrollTop = target;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date.getTime()]);

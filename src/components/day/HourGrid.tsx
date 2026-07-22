@@ -4,13 +4,13 @@ import { useEffect, useRef } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { CalendarColorName, CalendarEvent, CalendarSource } from "@/lib/types";
 import {
-  HOUR_HEIGHT_PX,
   LONG_PRESS_MS,
   LONG_PRESS_MOVE_TOLERANCE_PX,
   minutesToLocalIso,
 } from "@/lib/day-grid";
 import { formatHourParts, minutesSinceMidnight } from "@/lib/date-utils";
 import { layoutOverlappingEvents, SOLO_LAYOUT } from "@/lib/event-layout";
+import { useHourHeight } from "./DayScaleContext";
 import { EventBlock } from "./EventBlock";
 import { CurrentTimeLine } from "./CurrentTimeLine";
 
@@ -70,6 +70,7 @@ export function HourGrid({
   ghost = null,
   onEventLongPress,
 }: HourGridProps) {
+  const hourHeight = useHourHeight();
   const layout = layoutOverlappingEvents(
     events.map((e) => ({ id: e.id, start: new Date(e.start), end: new Date(e.end) })),
   );
@@ -153,7 +154,7 @@ export function HourGrid({
   return (
     <div
       className="relative"
-      style={{ height: HOUR_HEIGHT_PX * 24 }}
+      style={{ height: hourHeight * 24 }}
       onPointerMove={handleRootPointerMove}
       onPointerUp={handleRootPointerUp}
     >
@@ -163,7 +164,7 @@ export function HourGrid({
           <div
             key={hour}
             className="absolute inset-x-0 border-t border-black/[.07] ml-12 dark:border-white/[.1]"
-            style={{ top: hour * HOUR_HEIGHT_PX }}
+            style={{ top: hour * hourHeight }}
           >
             <span
               className="absolute -translate-y-1/2 -translate-x-14 text-right text-[11px] text-black/40 dark:text-white/40"

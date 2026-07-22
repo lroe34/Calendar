@@ -6,13 +6,14 @@ import type { CalendarColorName, CalendarEvent, CalendarSource, Reminder } from 
 import { MONTH_NAMES, addDays, isSameDay, startOfDay } from "@/lib/date-utils";
 import {
   EVENT_EDGE_GAP_PX,
+  HOUR_HEIGHT_PX,
+  MAX_HOUR_HEIGHT_PX,
   MINUTES_IN_DAY,
   MIN_EVENT_DURATION_MIN,
   MIN_EVENT_HEIGHT_PX,
+  MIN_HOUR_HEIGHT_PX,
   clamp,
   minutesToLocalIso,
-  minutesToPx,
-  pxToMinutes,
   snapMinutes,
 } from "@/lib/day-grid";
 import { TopNavBar } from "@/components/shared/TopNavBar";
@@ -20,6 +21,7 @@ import { BottomBar } from "@/components/shared/BottomBar";
 import { TRANSITION_MS, TRANSITION_EASE } from "@/lib/transition-constants";
 import { MiniWeekStrip } from "./MiniWeekStrip";
 import { DayContentPane } from "./DayContentPane";
+import { DayScaleContext } from "./DayScaleContext";
 import { EventBlockBody, type ResizeEdge } from "./EventBlock";
 import type { EventLongPressInfo } from "./HourGrid";
 
@@ -65,6 +67,29 @@ interface SwipeState {
 }
 
 type SwipePhase = "idle" | "pending" | "drag" | "settling";
+
+/** A live two-finger pinch on the hour grid. Height scales with the vertical
+ *  span between the fingers (the axis being zoomed), anchored so the time under
+ *  the fingers' midpoint stays put. */
+interface PinchState {
+  id1: number;
+  id2: number;
+  /** Vertical distance between the two fingers when the pinch began (>= 1). */
+  startSpan: number;
+  startHourHeight: number;
+}
+
+/** What the scroll-reanchoring layout effect needs to keep a zoom's focal time
+ *  under the same viewport pixel as the hour height changes. */
+interface ZoomAnchor {
+  /** Content minute (since midnight) held fixed under the focal point. */
+  anchorMin: number;
+  /** Viewport y the focal time should stay pinned to. */
+  anchorViewportY: number;
+  /** Viewport y of the grid's content top (rect.top + paddingTop), constant
+   *  through the gesture — the frame `anchorMin` is measured against. */
+  gridTop: number;
+}
 
 interface DragTrackState {
   pointerId: number;
@@ -232,10 +257,6 @@ interface EditGesture {
   anchorScrollTop: number;
 }
 
-function overlayTopPx(edit: EditSession): number {
-  return edit.anchorTop + minutesToPx(edit.startMin - edit.origStartMin) - edit.scrollOffsetPx;
-}
-
 /** Content-space (only day-bounds) start/end for a gesture at a given minute
  *  delta, before the visible-grid clamp is applied. */
 function editTimesForDelta(
@@ -261,10 +282,6 @@ function editTimesForDelta(
   };
 }
 
-function overlayHeightPx(edit: EditSession): number {
-  return Math.max(MIN_EVENT_HEIGHT_PX, minutesToPx(edit.endMin - edit.startMin)) - EVENT_EDGE_GAP_PX * 2;
-}
-
 export function DayView({
   today,
   selectedDate,
@@ -279,6 +296,25 @@ export function DayView({
   transition = null,
 }: DayViewProps) {
   const calendarsById = useMemo(() => new Map(calendars.map((c) => [c.id, c])), [calendars]);
+
+  // ---- Pinch-to-zoom hour height ----
+  // The rendered height of one hour. Owned here (above both swipeable panes) so
+  // a zoom applies to whichever day is showing and survives day-to-day swipes,
+  // and provided to the whole grid via DayScaleContext. The edit/drag math
+  // below reads it through the `minutesToPx`/`pxToMinutes` bound to it.
+  const [hourHeight, setHourHeight] = useState(HOUR_HEIGHT_PX);
+  const hourHeightRef = useRef(hourHeight);
+  hourHeightRef.current = hourHeight;
+  const pxPerMinute = hourHeight / 60;
+  const minutesToPx = (minutes: number) => minutes * pxPerMinute;
+  const pxToMinutes = (px: number) => px / pxPerMinute;
+
+  function overlayTopPx(e: EditSession): number {
+    return e.anchorTop + minutesToPx(e.startMin - e.origStartMin) - e.scrollOffsetPx;
+  }
+  function overlayHeightPx(e: EditSession): number {
+    return Math.max(MIN_EVENT_HEIGHT_PX, minutesToPx(e.endMin - e.startMin)) - EVENT_EDGE_GAP_PX * 2;
+  }
 
   // The pinned chrome (nav bar + mini week strip) sits above the swipeable
   // day panes; its height tells each pane where its own content starts.
@@ -322,6 +358,17 @@ export function DayView({
   const springCancelRef = useRef<(() => void) | null>(null);
   const dragRef = useRef<DragTrackState | null>(null);
 
+  // ---- Pinch-to-zoom gesture state ----
+  // Live positions of every touch pointer on the grid, so a second finger can
+  // be recognized as a pinch. Mouse pointers are never tracked here.
+  const activePointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const pinchRef = useRef<PinchState | null>(null);
+  // The time (content minute) held fixed under the zoom's focal point, plus the
+  // viewport geometry needed to re-derive scrollTop after the height changes.
+  // Set by both the pinch and the trackpad/ctrl-wheel zoom; consumed by the
+  // layout effect that re-anchors scroll whenever hourHeight changes.
+  const zoomAnchorRef = useRef<ZoomAnchor | null>(null);
+
   // ---- On-grid edit (move/resize), owned above the panes for cross-day drag ----
   const [edit, setEdit] = useState<EditSession | null>(null);
   const editPointerRef = useRef<number | null>(null);
@@ -364,7 +411,9 @@ export function DayView({
     const el = swipeContainerRef.current;
     if (!el) return;
     const onTouchMove = (e: TouchEvent) => {
-      if (editPointerRef.current !== null) e.preventDefault();
+      // Suppress native pan while an event edit or a pinch-zoom is live — both
+      // drive the grid themselves and must not also native-scroll it.
+      if (editPointerRef.current !== null || pinchRef.current !== null) e.preventDefault();
     };
     el.addEventListener("touchmove", onTouchMove, { passive: false });
     return () => el.removeEventListener("touchmove", onTouchMove);
@@ -493,9 +542,102 @@ export function DayView({
     }
   }
 
+  /** Content minute under a viewport y, using the current hour height and the
+   *  visible grid's frame. Null if the grid isn't measurable yet. */
+  function focalMinuteAt(viewportY: number): { anchorMin: number; gridTop: number } | null {
+    const band = getEditBand();
+    if (!band) return null;
+    const anchorMin = (viewportY - band.gridTop + band.scrollTop) / (hourHeightRef.current / 60);
+    return { anchorMin, gridTop: band.gridTop };
+  }
+
+  /** Apply a new hour height (clamped) and remember the focal point so the
+   *  layout effect keeps `viewportY`'s time pinned there as the grid rescales. */
+  function zoomTo(nextHeight: number, viewportY: number, anchorMin: number, gridTop: number) {
+    zoomAnchorRef.current = { anchorMin, anchorViewportY: viewportY, gridTop };
+    setHourHeight(clamp(nextHeight, MIN_HOUR_HEIGHT_PX, MAX_HOUR_HEIGHT_PX));
+  }
+
+  function beginPinch(id1: number, id2: number) {
+    const p1 = activePointersRef.current.get(id1);
+    const p2 = activePointersRef.current.get(id2);
+    if (!p1 || !p2) return;
+    // Abandon any single-finger swipe/scroll intent the first finger armed, and
+    // stop a settling day-swipe so the panes don't slide during the zoom.
+    dragRef.current = null;
+    springCancelRef.current?.();
+    springCancelRef.current = null;
+    phaseRef.current = "idle";
+
+    const midY = (p1.y + p2.y) / 2;
+    const focal = focalMinuteAt(midY);
+    pinchRef.current = {
+      id1,
+      id2,
+      startSpan: Math.max(1, Math.abs(p1.y - p2.y)),
+      startHourHeight: hourHeightRef.current,
+    };
+    if (focal) zoomAnchorRef.current = { anchorMin: focal.anchorMin, anchorViewportY: midY, gridTop: focal.gridTop };
+  }
+
+  function updatePinch() {
+    const pinch = pinchRef.current;
+    if (!pinch) return;
+    const p1 = activePointersRef.current.get(pinch.id1);
+    const p2 = activePointersRef.current.get(pinch.id2);
+    const anchor = zoomAnchorRef.current;
+    if (!p1 || !p2 || !anchor) return;
+    const span = Math.max(1, Math.abs(p1.y - p2.y));
+    setHourHeight(clamp(pinch.startHourHeight * (span / pinch.startSpan), MIN_HOUR_HEIGHT_PX, MAX_HOUR_HEIGHT_PX));
+  }
+
+  function endPinch() {
+    pinchRef.current = null;
+    zoomAnchorRef.current = null;
+    // A finger may still be down; don't let it be read as a fresh swipe/scroll.
+    dragRef.current = null;
+  }
+
+  // After the hour height changes (pinch, wheel), re-derive the base pane's
+  // scrollTop so the anchored time stays under the same viewport pixel — a
+  // stationary focal point is what makes the zoom read as scaling *around* the
+  // fingers rather than from the top of the day. Runs in a layout effect so it
+  // reads the just-updated scrollHeight before the browser paints.
+  useLayoutEffect(() => {
+    const anchor = zoomAnchorRef.current;
+    const el = baseScrollRef.current;
+    if (!anchor || !el) return;
+    const gridY = anchor.anchorMin * (hourHeight / 60);
+    const maxScroll = Math.max(0, el.scrollHeight - el.clientHeight);
+    el.scrollTop = clamp(gridY - (anchor.anchorViewportY - anchor.gridTop), 0, maxScroll);
+  }, [hourHeight]);
+
+  // Trackpad pinch / ctrl+wheel zoom — the desktop equivalent of the touch
+  // pinch, anchored at the cursor. Non-passive so it can pre-empt the browser's
+  // own page zoom.
+  useEffect(() => {
+    const el = swipeContainerRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      if (edit || editGestureRef.current) return;
+      e.preventDefault();
+      const focal = focalMinuteAt(e.clientY);
+      if (!focal) return;
+      const next = hourHeightRef.current * Math.exp(-e.deltaY * 0.01);
+      zoomTo(next, e.clientY, focal.anchorMin, focal.gridTop);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [edit]);
+
   // Long-press on an event (reported up from HourGrid) → pick it up.
   function handleEnterEdit(info: EventLongPressInfo) {
     if (transition) return;
+    // A second finger may have turned this into a pinch-zoom before the
+    // long-press timer fired — don't also pick the event up.
+    if (pinchRef.current) return;
     editPointerRef.current = info.pointerId;
     lastEditPointerYRef.current = info.clientY;
     editGestureRef.current = {
@@ -767,6 +909,19 @@ export function DayView({
     if (transition) return;
     if (e.pointerType === "mouse" && e.button !== 0) return;
 
+    // Track touch pointers so a second finger can be recognized as a pinch.
+    if (e.pointerType !== "mouse") {
+      activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      // Second finger down (from rest, not mid-edit/swipe) → start a pinch zoom.
+      if (!edit && !swipe && activePointersRef.current.size === 2) {
+        const [id1, id2] = [...activePointersRef.current.keys()];
+        beginPinch(id1, id2);
+        return;
+      }
+      // Already pinching (or a 3rd+ finger arrived): don't arm a swipe with it.
+      if (pinchRef.current) return;
+    }
+
     // A real scroll view can be grabbed mid-deceleration: stop the spring
     // exactly where it is and resume 1:1 finger tracking from there, instead
     // of ignoring the touch until the settle finishes.
@@ -800,6 +955,13 @@ export function DayView({
   }
 
   function handlePointerMove(e: ReactPointerEvent) {
+    if (e.pointerType !== "mouse" && activePointersRef.current.has(e.pointerId)) {
+      activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+    if (pinchRef.current) {
+      updatePinch();
+      return;
+    }
     if (editPointerRef.current === e.pointerId) {
       handleEditMove(e);
       return;
@@ -834,6 +996,11 @@ export function DayView({
   }
 
   function handlePointerUp(e: ReactPointerEvent) {
+    if (e.pointerType !== "mouse") activePointersRef.current.delete(e.pointerId);
+    if (pinchRef.current) {
+      if (e.pointerId === pinchRef.current.id1 || e.pointerId === pinchRef.current.id2) endPinch();
+      return;
+    }
     if (editPointerRef.current === e.pointerId) {
       commitEdit(e);
       return;
@@ -849,6 +1016,11 @@ export function DayView({
   }
 
   function handlePointerCancel(e: ReactPointerEvent) {
+    if (e.pointerType !== "mouse") activePointersRef.current.delete(e.pointerId);
+    if (pinchRef.current) {
+      if (e.pointerId === pinchRef.current.id1 || e.pointerId === pinchRef.current.id2) endPinch();
+      return;
+    }
     if (editPointerRef.current === e.pointerId) {
       cancelEdit(e);
       return;
@@ -906,6 +1078,7 @@ export function DayView({
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
       >
+        <DayScaleContext.Provider value={hourHeight}>
         <div ref={basePaneRef} className="absolute inset-0" style={PANE_LAYER_STYLE}>
           <DayContentPane
             date={selectedDate}
@@ -1004,6 +1177,7 @@ export function DayView({
             </div>
           </>
         )}
+        </DayScaleContext.Provider>
       </div>
 
       <div ref={headerRef} className="absolute inset-x-0 top-0 z-20 select-none">
