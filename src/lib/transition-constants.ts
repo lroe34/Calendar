@@ -1,5 +1,5 @@
 export const TRANSITION_MS = 300;
-export const TRANSITION_EASE = "cubic-bezier(0.42, 0, 0.58, 1.0)";
+export const TRANSITION_EASE = "cubic-bezier(0.22, 1, 0.36, 1)";
 
 /**
  * The "after" (below-the-fold) week rows only need to travel a short
