@@ -182,11 +182,13 @@ function ResizeHandle({
       role="button"
       aria-label={atStart ? "Adjust start time" : "Adjust end time"}
       onPointerDown={(e) => onResizeHandleDown?.(edge, e)}
-      className="absolute z-10 h-[15px] w-[15px] rounded-full border border-black/10 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.3)]"
+      className="absolute z-10 h-[12px] w-[12px] rounded-full border border-black/10 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.3)]"
       style={{
         touchAction: "none",
         cursor: "ns-resize",
-        ...(atStart ? { top: -7, right: -7 } : { bottom: -7, left: -7 }),
+        // Straddle the top/bottom edge vertically, but sit ~25px in from the
+        // left/right edges so the handles read closer to the block's middle.
+        ...(atStart ? { top: -6, right: 18 } : { bottom: -6, left: 18 }),
       }}
     />
   );

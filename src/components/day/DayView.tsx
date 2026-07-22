@@ -195,6 +195,9 @@ interface EditSession {
   startMin: number;
   endMin: number;
   dragging: boolean;
+  /** Which edge the active gesture moves — the one whose quarter-hour tick is
+   *  shown. A move drags both edges together, so it tracks the start. */
+  activeEdge: "start" | "end";
   /** Viewport rect of the block at pickup: anchorTop corresponds to origStartMin. */
   anchorTop: number;
   anchorLeft: number;
@@ -356,6 +359,7 @@ export function DayView({
       startMin: info.origStartMin,
       endMin: info.origEndMin,
       dragging: true,
+      activeEdge: "start",
       anchorTop: info.rect.top,
       anchorLeft: info.rect.left,
       anchorWidth: info.rect.width,
@@ -380,7 +384,9 @@ export function DayView({
     };
     editPointerRef.current = e.pointerId;
     setEdit((prev) =>
-      prev ? { ...prev, dragging: true, origStartMin: prev.startMin, origEndMin: prev.endMin, anchorTop: top } : prev,
+      prev
+        ? { ...prev, dragging: true, activeEdge: "start", origStartMin: prev.startMin, origEndMin: prev.endMin, anchorTop: top }
+        : prev,
     );
     captureEditPointer(e.pointerId);
   }
@@ -401,7 +407,16 @@ export function DayView({
     };
     editPointerRef.current = e.pointerId;
     setEdit((prev) =>
-      prev ? { ...prev, dragging: true, origStartMin: prev.startMin, origEndMin: prev.endMin, anchorTop: top } : prev,
+      prev
+        ? {
+            ...prev,
+            dragging: true,
+            activeEdge: edge === "start" ? "start" : "end",
+            origStartMin: prev.startMin,
+            origEndMin: prev.endMin,
+            anchorTop: top,
+          }
+        : prev,
     );
     captureEditPointer(e.pointerId);
   }
@@ -685,18 +700,20 @@ export function DayView({
   const neighborEditingId = neighborIsSource ? edit!.event.id : null;
   const neighborGhost = neighborIsSource && edit!.dragging ? { startMin: edit!.origStartMin, endMin: edit!.origEndMin } : null;
 
-  // Quarter-hour gutter ticks, only during an active drag, around the hours the
-  // moving edges sit in — pinned to the overlay's coordinate frame.
+  // Quarter-hour gutter tick, only during an active drag: a single label at the
+  // moving edge (the one the gesture drives), and only when it lands on a
+  // quarter mark — on the hour the gutter's own hour label already covers it.
+  // Pinned to the overlay's coordinate frame.
+  const editTickMin = edit ? (edit.activeEdge === "end" ? edit.endMin : edit.startMin) : 0;
   const editTicks =
-    edit && edit.dragging
-      ? Array.from(new Set([Math.floor(edit.startMin / 60), Math.floor(edit.endMin / 60)]))
-          .filter((h) => h >= 0 && h < 24)
-          .flatMap((h) =>
-            [15, 30, 45]
-              .map((m) => h * 60 + m)
-              .filter((min) => min < MINUTES_IN_DAY)
-              .map((min) => ({ min, label: `:${min % 60}`, y: edit.anchorTop + minutesToPx(min - edit.origStartMin) })),
-          )
+    edit && edit.dragging && editTickMin % 60 !== 0 && editTickMin > 0 && editTickMin < MINUTES_IN_DAY
+      ? [
+          {
+            min: editTickMin,
+            label: `:${editTickMin % 60}`,
+            y: edit.anchorTop + minutesToPx(editTickMin - edit.origStartMin),
+          },
+        ]
       : [];
 
   const chromeIsOff = transition ? (transition.mode === "exit" ? transition.armed : !transition.armed) : false;
@@ -730,6 +747,7 @@ export function DayView({
             ghost={baseGhost}
             onEventLongPress={handleEnterEdit}
             topOffset={headerHeight}
+            scrollLocked={!!edit}
             verticalTransition={
               transition
                 ? {
@@ -755,6 +773,7 @@ export function DayView({
               ghost={neighborGhost}
               onEventLongPress={handleEnterEdit}
               topOffset={headerHeight}
+              scrollLocked={!!edit}
               verticalTransition={null}
             />
           </div>
@@ -815,7 +834,7 @@ export function DayView({
         )}
       </div>
 
-      <div ref={headerRef} className="absolute inset-x-0 top-0 z-20">
+      <div ref={headerRef} className="absolute inset-x-0 top-0 z-20 select-none">
         {/* Pinned chrome: nav band + mini strip only. Day heading / all-day
             lane now live inside each swipeable DayContentPane so they slide
             with the hour grid instead of snapping. */}
@@ -832,11 +851,11 @@ export function DayView({
         </div>
       </div>
 
-      <div className="absolute inset-x-0 top-0 z-40" style={chromeStyle}>
+      <div className="absolute inset-x-0 top-0 z-40 select-none" style={chromeStyle}>
         <TopNavBar backLabel={MONTH_NAMES[selectedDate.getMonth()].slice(0, 3)} onBack={onBack} />
       </div>
 
-      <div className="absolute inset-x-0 bottom-0 z-40" style={chromeStyle}>
+      <div className="absolute inset-x-0 bottom-0 z-40 select-none" style={chromeStyle}>
         <BottomBar onToday={() => navigateTo(today)} onGridView={onGridView} />
       </div>
     </div>
