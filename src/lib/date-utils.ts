@@ -187,6 +187,14 @@ export function formatFullDate(date: Date): string {
   return `${WEEKDAY_NAMES[date.getDay()]}, ${MONTH_NAMES[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
 }
 
+/** Abbreviated weekday + month, e.g. "Fri, Jul 24, 2026" — compact enough to
+ *  pair with a time on one line for multi-day event ranges. */
+export function formatMediumDate(date: Date): string {
+  return `${WEEKDAY_NAMES[date.getDay()].slice(0, 3)}, ${
+    MONTH_ABBR[date.getMonth()]
+  } ${date.getDate()}, ${date.getFullYear()}`;
+}
+
 export function formatTimeSpaced(date: Date): string {
   const h = date.getHours();
   const m = date.getMinutes();

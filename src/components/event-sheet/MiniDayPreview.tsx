@@ -1,6 +1,6 @@
 import type { CalendarEvent, CalendarColorName } from "@/lib/types";
-import { HOUR_HEIGHT_PX } from "@/lib/day-grid";
-import { formatHour, minutesSinceMidnight } from "@/lib/date-utils";
+import { HOUR_HEIGHT_PX, timedEventDaySegment } from "@/lib/day-grid";
+import { formatHour } from "@/lib/date-utils";
 import { EventBlock } from "@/components/day/EventBlock";
 import { SOLO_LAYOUT } from "@/lib/event-layout";
 
@@ -13,9 +13,14 @@ const GUTTER_WIDTH_PX = 44;
 
 export function MiniDayPreview({ event, colorName }: MiniDayPreviewProps) {
   const start = new Date(event.start);
-  const end = new Date(event.end);
-  const startHour = Math.max(0, Math.floor(minutesSinceMidnight(start) / 60) - 1);
-  const endHour = Math.min(24, Math.ceil(minutesSinceMidnight(end) / 60) + 1);
+  // Preview the event on its start day: a multi-day event is clipped to that
+  // day's bounds so the window doesn't collapse (its end minute lands on a
+  // later day). Falls back to a single day's own start/end.
+  const segment =
+    timedEventDaySegment(event.start, event.end, start) ??
+    ({ startMin: 0, endMin: 0, continuesBefore: false, continuesAfter: false } as const);
+  const startHour = Math.max(0, Math.floor(segment.startMin / 60) - 1);
+  const endHour = Math.min(24, Math.ceil(segment.endMin / 60) + 1);
   const hours = Array.from({ length: endHour - startHour }, (_, i) => startHour + i);
   const windowTop = startHour * HOUR_HEIGHT_PX;
 
@@ -49,6 +54,7 @@ export function MiniDayPreview({ event, colorName }: MiniDayPreviewProps) {
           <EventBlock
             event={event}
             colorName={colorName}
+            segment={segment}
             leftPct={SOLO_LAYOUT.leftPct}
             widthPct={SOLO_LAYOUT.widthPct}
             variant="solid"

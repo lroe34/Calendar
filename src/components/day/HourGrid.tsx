@@ -7,8 +7,10 @@ import {
   LONG_PRESS_MS,
   LONG_PRESS_MOVE_TOLERANCE_PX,
   minutesToLocalIso,
+  timedEventDaySegment,
+  type EventDaySegment,
 } from "@/lib/day-grid";
-import { formatHourParts, minutesSinceMidnight } from "@/lib/date-utils";
+import { formatHourParts, minutesSinceMidnight, startOfDay } from "@/lib/date-utils";
 import { layoutOverlappingEvents, SOLO_LAYOUT } from "@/lib/event-layout";
 import { useHourHeight } from "./DayScaleContext";
 import { EventBlock } from "./EventBlock";
@@ -35,6 +37,8 @@ export interface GhostSpec {
 }
 
 interface HourGridProps {
+  /** The calendar day this grid renders — multi-day events are clipped to it. */
+  date: Date;
   events: CalendarEvent[];
   calendarsById: Map<string, CalendarSource>;
   isToday: boolean;
@@ -62,6 +66,7 @@ interface PendingPress {
 }
 
 export function HourGrid({
+  date,
   events,
   calendarsById,
   isToday,
@@ -71,8 +76,28 @@ export function HourGrid({
   onEventLongPress,
 }: HourGridProps) {
   const hourHeight = useHourHeight();
+
+  // Each event's slice on this day, clipped to midnight. Column packing and
+  // block geometry both work off these clipped bounds so an event running
+  // across midnight lays out against the right edges on each day it touches.
+  const dayStartMs = startOfDay(date).getTime();
+  const segmentById = new Map<string, EventDaySegment>();
+  for (const e of events) {
+    const seg = timedEventDaySegment(e.start, e.end, date);
+    if (seg) segmentById.set(e.id, seg);
+  }
+
   const layout = layoutOverlappingEvents(
-    events.map((e) => ({ id: e.id, start: new Date(e.start), end: new Date(e.end) })),
+    events
+      .filter((e) => segmentById.has(e.id))
+      .map((e) => {
+        const seg = segmentById.get(e.id)!;
+        return {
+          id: e.id,
+          start: new Date(dayStartMs + seg.startMin * 60_000),
+          end: new Date(dayStartMs + seg.endMin * 60_000),
+        };
+      }),
   );
   const layoutById = new Map(layout.map((l) => [l.id, l]));
 
@@ -91,6 +116,7 @@ export function HourGrid({
   function handleEventPointerDown(event: CalendarEvent, colorName: CalendarColorName, e: ReactPointerEvent) {
     if (e.pointerType === "mouse" && e.button !== 0) return;
     const rect = e.currentTarget.getBoundingClientRect();
+    const seg = segmentById.get(event.id);
     const p: PendingPress = {
       pointerId: e.pointerId,
       startClientX: e.clientX,
@@ -98,13 +124,18 @@ export function HourGrid({
       rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
       event,
       colorName,
-      origStartMin: minutesSinceMidnight(new Date(event.start)),
-      origEndMin: minutesSinceMidnight(new Date(event.end)),
+      origStartMin: seg?.startMin ?? minutesSinceMidnight(new Date(event.start)),
+      origEndMin: seg?.endMin ?? minutesSinceMidnight(new Date(event.end)),
       moved: false,
       firedEdit: false,
     };
     pendingRef.current = p;
     clearTimer();
+    // On-grid move/resize retimes within a single day, so it can't express an
+    // event that spills onto another day without truncating it. A press on
+    // such a segment stays a plain tap (→ open the sheet, where the full
+    // start/end date+time can be edited); only self-contained events pick up.
+    if (seg && (seg.continuesBefore || seg.continuesAfter)) return;
     timerRef.current = window.setTimeout(() => {
       timerRef.current = null;
       const cur = pendingRef.current;
@@ -188,6 +219,7 @@ export function HourGrid({
               key={event.id}
               event={event}
               colorName={colorName}
+              segment={segmentById.get(event.id)}
               leftPct={l?.leftPct ?? SOLO_LAYOUT.leftPct}
               widthPct={l?.widthPct ?? SOLO_LAYOUT.widthPct}
               nested={l?.nested ?? false}

@@ -150,6 +150,29 @@ const explicitEvents: CalendarEvent[] = [
     end: isoDate(2026, 6, 18),
     isAllDay: true,
   },
+  {
+    id: "ev-redeye",
+    calendarId: "cal-blue",
+    title: "Red-eye: IAH to LHR",
+    start: iso(2026, 6, 16, 22, 30),
+    end: iso(2026, 6, 17, 6, 45),
+    isAllDay: false,
+    location: {
+      name: "George Bush Intercontinental Airport",
+      kind: "flight",
+    },
+    showAs: "busy",
+  },
+  {
+    id: "ev-offsite",
+    calendarId: "cal-slate",
+    title: "Team Offsite",
+    start: iso(2026, 6, 20, 9, 0),
+    end: iso(2026, 6, 22, 17, 0),
+    isAllDay: false,
+    location: { name: "Asilomar Conference Grounds" },
+    showAs: "busy",
+  },
 ];
 
 export const reminders: Reminder[] = [

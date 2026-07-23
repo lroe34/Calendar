@@ -7,6 +7,9 @@ import { CALENDAR_COLORS } from "@/lib/colors";
 import {
   formatEventTimeRangeSpaced,
   formatFullDate,
+  formatMediumDate,
+  formatTimeSpaced,
+  isSameDay,
   toDateInputValue,
   toTimeInputValue,
 } from "@/lib/date-utils";
@@ -48,6 +51,45 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function Divider() {
   return <div className="ml-11 border-t border-black/[.06] dark:border-white/[.08]" />;
+}
+
+/** The event's date/time summary in view mode. Single-day events keep the
+ *  original date-then-time-range layout; multi-day events spell out a start
+ *  and end line so the span across days is unambiguous. */
+function EventWhen({ start, end, isAllDay }: { start: Date; end: Date; isAllDay: boolean }) {
+  const multiDay = !isSameDay(start, end);
+
+  if (!multiDay) {
+    return (
+      <>
+        <div className="mt-2 text-[19px] leading-snug">{formatFullDate(start)}</div>
+        <div className="text-[19px] leading-snug text-black/55 dark:text-white/55">
+          {isAllDay ? "All-day" : formatEventTimeRangeSpaced(start, end)}
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <div className="mt-2 flex flex-col gap-1.5">
+      {(
+        [
+          ["Starts", start],
+          ["Ends", end],
+        ] as const
+      ).map(([label, date]) => (
+        <div key={label} className="flex items-baseline gap-2.5 text-[19px] leading-snug">
+          <span className="w-12 shrink-0 text-[12px] font-medium uppercase tracking-wide text-black/40 dark:text-white/40">
+            {label}
+          </span>
+          <span>
+            {formatMediumDate(date)}
+            {!isAllDay && <span className="text-black/55 dark:text-white/55"> · {formatTimeSpaced(date)}</span>}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function PickerRow({
@@ -195,10 +237,9 @@ export function EventDetailSheet({
             {mode === "view" ? (
               <div className="flex gap-3 pb-2 pt-2">
                 <div className="w-1 shrink-0 self-stretch rounded-full" style={{ backgroundColor: color.accent }} />
-                <div>
+                <div className="min-w-0">
                   <h1 className="text-[28px] font-bold leading-tight">{draft.title}</h1>
-                  <div className="mt-2 text-[19px] leading-snug">{formatFullDate(start)}</div>
-                  <div className="text-[19px] leading-snug">{formatEventTimeRangeSpaced(start, end)}</div>
+                  <EventWhen start={start} end={end} isAllDay={draft.isAllDay} />
                 </div>
               </div>
             ) : (
