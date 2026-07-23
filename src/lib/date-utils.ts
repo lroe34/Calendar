@@ -187,12 +187,18 @@ export function formatFullDate(date: Date): string {
   return `${WEEKDAY_NAMES[date.getDay()]}, ${MONTH_NAMES[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
 }
 
-/** Abbreviated weekday + month, e.g. "Fri, Jul 24, 2026" — compact enough to
- *  pair with a time on one line for multi-day event ranges. */
-export function formatMediumDate(date: Date): string {
-  return `${WEEKDAY_NAMES[date.getDay()].slice(0, 3)}, ${
-    MONTH_ABBR[date.getMonth()]
-  } ${date.getDate()}, ${date.getFullYear()}`;
+/**
+ * A clock time split into its numeric portion and AM/PM suffix, so callers
+ * can render the period smaller (small-caps) alongside the time. On-the-hour
+ * times drop the ":00" (e.g. `{ value: "10", period: "PM" }`); otherwise the
+ * minutes are kept (`{ value: "10:30", period: "PM" }`).
+ */
+export function formatClockParts(date: Date): { value: string; period: string } {
+  const h = date.getHours();
+  const m = date.getMinutes();
+  const period = h < 12 ? "AM" : "PM";
+  const displayHour = h % 12 === 0 ? 12 : h % 12;
+  return { value: m === 0 ? `${displayHour}` : `${displayHour}:${String(m).padStart(2, "0")}`, period };
 }
 
 export function formatTimeSpaced(date: Date): string {

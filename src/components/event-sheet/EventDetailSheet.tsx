@@ -5,10 +5,9 @@ import { Drawer } from "vaul";
 import type { CalendarEvent, CalendarSource, ShowAs } from "@/lib/types";
 import { CALENDAR_COLORS } from "@/lib/colors";
 import {
+  formatClockParts,
   formatEventTimeRangeSpaced,
   formatFullDate,
-  formatMediumDate,
-  formatTimeSpaced,
   isSameDay,
   toDateInputValue,
   toTimeInputValue,
@@ -53,42 +52,52 @@ function Divider() {
   return <div className="ml-11 border-t border-black/[.06] dark:border-white/[.08]" />;
 }
 
-/** The event's date/time summary in view mode. Single-day events keep the
- *  original date-then-time-range layout; multi-day events spell out a start
- *  and end line so the span across days is unambiguous. */
+/** A clock time with its AM/PM suffix set smaller in caps, e.g. "10 ᴘᴍ". */
+function ClockText({ date }: { date: Date }) {
+  const { value, period } = formatClockParts(date);
+  return (
+    <span className="whitespace-nowrap">
+      {value}
+      <span className="ml-1 align-baseline text-[0.62em] font-semibold uppercase tracking-wide">
+        {period}
+      </span>
+    </span>
+  );
+}
+
+/** The event's date/time summary in view mode. A single-day event reads as a
+ *  date with a time range (or "All-day"); an event that runs across days
+ *  reads as one flowing "From {time} {date} to {time} {date}" sentence. */
 function EventWhen({ start, end, isAllDay }: { start: Date; end: Date; isAllDay: boolean }) {
   const multiDay = !isSameDay(start, end);
 
-  if (!multiDay) {
+  if (multiDay) {
     return (
-      <>
-        <div className="mt-2 text-[19px] leading-snug">{formatFullDate(start)}</div>
-        <div className="text-[19px] leading-snug text-black/55 dark:text-white/55">
-          {isAllDay ? "All-day" : formatEventTimeRangeSpaced(start, end)}
-        </div>
-      </>
+      <div className="mt-2 text-[19px] leading-snug">
+        From{" "}
+        {!isAllDay && (
+          <>
+            <ClockText date={start} />{" "}
+          </>
+        )}
+        {formatFullDate(start)} to{" "}
+        {!isAllDay && (
+          <>
+            <ClockText date={end} />{" "}
+          </>
+        )}
+        {formatFullDate(end)}
+      </div>
     );
   }
 
   return (
-    <div className="mt-2 flex flex-col gap-1.5">
-      {(
-        [
-          ["Starts", start],
-          ["Ends", end],
-        ] as const
-      ).map(([label, date]) => (
-        <div key={label} className="flex items-baseline gap-2.5 text-[19px] leading-snug">
-          <span className="w-12 shrink-0 text-[12px] font-medium uppercase tracking-wide text-black/40 dark:text-white/40">
-            {label}
-          </span>
-          <span>
-            {formatMediumDate(date)}
-            {!isAllDay && <span className="text-black/55 dark:text-white/55"> · {formatTimeSpaced(date)}</span>}
-          </span>
-        </div>
-      ))}
-    </div>
+    <>
+      <div className="mt-2 text-[19px] leading-snug">{formatFullDate(start)}</div>
+      <div className="text-[19px] leading-snug text-black/55 dark:text-white/55">
+        {isAllDay ? "All-day" : formatEventTimeRangeSpaced(start, end)}
+      </div>
+    </>
   );
 }
 
@@ -324,6 +333,14 @@ export function EventDetailSheet({
               </div>
             )}
 
+            {/* A day-grid preview of where the event sits, shown for every
+                timed event (all-day events have no hour position to plot). */}
+            {mode === "view" && !draft.isAllDay && (
+              <div className="mt-5">
+                <MiniDayPreview event={draft} colorName={liveCalendar.color} />
+              </div>
+            )}
+
             {hasLocationSection && (
               <Section title="Location">
                 {mode === "view" && draft.source && <SourceCard source={draft.source} />}
@@ -355,12 +372,6 @@ export function EventDetailSheet({
                   </button>
                 )}
               </Section>
-            )}
-
-            {mode === "view" && draft.location && (
-              <div className="mt-4">
-                <MiniDayPreview event={draft} colorName={liveCalendar.color} />
-              </div>
             )}
 
             {hasInvitees && (
