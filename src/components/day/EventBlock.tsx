@@ -2,7 +2,7 @@
 
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { CalendarEvent } from "@/lib/types";
-import { CALENDAR_COLORS } from "@/lib/colors";
+import { CALENDAR_COLORS, hexToRgba } from "@/lib/colors";
 import {
   DETAIL_DISCLOSURE_THRESHOLD_PX,
   EVENT_EDGE_GAP_PX,
@@ -140,16 +140,12 @@ export function EventBlockBody({
       <div
         className="h-full w-full overflow-hidden"
         style={{
-          backgroundColor: isSolid ? color.accent : color.tint,
+          backgroundColor: isSolid ? color.accent : nested ? hexToRgba(color.accent, 0.22) : color.tint,
           borderTopLeftRadius: continuesBefore ? 0 : RADIUS,
           borderTopRightRadius: continuesBefore ? 0 : RADIUS,
           borderBottomLeftRadius: continuesAfter ? 0 : RADIUS,
           borderBottomRightRadius: continuesAfter ? 0 : RADIUS,
-          boxShadow: editing
-            ? "0 6px 18px rgba(0,0,0,0.28)"
-            : nested
-              ? "0 1px 6px rgba(0,0,0,0.18)"
-              : undefined,
+          boxShadow: editing ? "0 6px 18px rgba(0,0,0,0.28)" : undefined,
         }}
       >
         {!isSolid && (
