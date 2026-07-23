@@ -15,9 +15,9 @@ export interface LayoutResult {
 }
 
 /** How far a nested event is inset from its container's left edge, as a
- * fraction of the container's own width — leaves a strip of the container
- * (and its left accent line) visible instead of fully covering it. */
-const NESTED_INDENT_FRACTION = 0.12;
+ * fraction of the container's own width — leaves a thin strip of the
+ * container (and its left accent line) visible instead of fully covering it. */
+const NESTED_INDENT_FRACTION = 0.04;
 
 /** Single full-width slot, for callers that only ever render one event at a time.
  *  Horizontal edge inset is applied in EventBlock (pixel gap), not here. */
