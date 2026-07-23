@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CalendarEvent, CalendarSource, Reminder } from "@/lib/types";
 import { isSameDay } from "@/lib/date-utils";
+import { timedEventDaySegment } from "@/lib/day-grid";
 import { TRANSITION_MS, TRANSITION_EASE } from "@/lib/transition-constants";
 import { DayHeading } from "./DayHeading";
 import { AllDayLane } from "./AllDayLane";
@@ -76,8 +77,11 @@ export function DayContentPane({
     [reminders, date],
   );
 
+  // A timed event appears on every day its interval touches, not just the day
+  // it starts — so an event running from one day into the next is drawn on
+  // both (clipped to each day's midnight bounds by HourGrid).
   const timedEvents = useMemo(
-    () => events.filter((e) => !e.isAllDay && isSameDay(new Date(e.start), date)),
+    () => events.filter((e) => !e.isAllDay && timedEventDaySegment(e.start, e.end, date) !== null),
     [events, date],
   );
 
@@ -255,6 +259,7 @@ export function DayContentPane({
         }}
       >
         <HourGrid
+          date={date}
           events={timedEvents}
           calendarsById={calendarsById}
           isToday={isToday}

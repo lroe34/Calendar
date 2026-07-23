@@ -7,6 +7,7 @@ import {
   DETAIL_DISCLOSURE_THRESHOLD_PX,
   EVENT_EDGE_GAP_PX,
   MIN_EVENT_HEIGHT_PX,
+  type EventDaySegment,
 } from "@/lib/day-grid";
 import { formatEventTimeRange, minutesSinceMidnight } from "@/lib/date-utils";
 import { useDayScale } from "./DayScaleContext";
@@ -17,6 +18,10 @@ export type ResizeEdge = "start" | "end";
 interface EventBlockProps {
   event: CalendarEvent;
   colorName: keyof typeof CALENDAR_COLORS;
+  /** The event's clipped slice on the day being rendered. When set, the block
+   *  is positioned by the segment's bounds (so a multi-day event fills only
+   *  its portion of each day) rather than the event's raw start/end. */
+  segment?: EventDaySegment;
   leftPct: number;
   widthPct: number;
   /** True when this event is inset over a container event it's fully
@@ -41,6 +46,7 @@ interface EventBlockProps {
 export function EventBlock({
   event,
   colorName,
+  segment,
   leftPct,
   widthPct,
   nested = false,
@@ -53,13 +59,18 @@ export function EventBlock({
   const { minutesToPx } = useDayScale();
   const start = new Date(event.start);
   const end = new Date(event.end);
-  const top = minutesToPx(minutesSinceMidnight(start)) + EVENT_EDGE_GAP_PX;
-  const height =
-    Math.max(
-      MIN_EVENT_HEIGHT_PX,
-      minutesToPx(minutesSinceMidnight(end) - minutesSinceMidnight(start)),
-    ) -
-    EVENT_EDGE_GAP_PX * 2;
+  const startMin = segment ? segment.startMin : minutesSinceMidnight(start);
+  const endMin = segment ? segment.endMin : minutesSinceMidnight(end);
+  const continuesBefore = segment?.continuesBefore ?? false;
+  const continuesAfter = segment?.continuesAfter ?? false;
+
+  // A continued edge runs flush to the day boundary (no inset gap) so the bar
+  // reads as one piece across midnight; a real edge keeps the usual gap that
+  // separates back-to-back blocks.
+  const topGap = continuesBefore ? 0 : EVENT_EDGE_GAP_PX;
+  const bottomGap = continuesAfter ? 0 : EVENT_EDGE_GAP_PX;
+  const top = minutesToPx(startMin) + topGap;
+  const height = Math.max(MIN_EVENT_HEIGHT_PX, minutesToPx(endMin - startMin)) - topGap - bottomGap;
 
   return (
     <div
@@ -82,6 +93,8 @@ export function EventBlock({
         variant={variant}
         heightPx={height}
         nested={nested}
+        continuesBefore={continuesBefore}
+        continuesAfter={continuesAfter}
       />
     </div>
   );
@@ -94,6 +107,11 @@ interface EventBlockBodyProps {
   /** Rendered height, used to decide whether the location/time detail lines show. */
   heightPx: number;
   nested?: boolean;
+  /** The event continues from the previous day — square off the top corners so
+   *  the bar reads as carrying over the midnight boundary. */
+  continuesBefore?: boolean;
+  /** The event continues onto the next day — square off the bottom corners. */
+  continuesAfter?: boolean;
   /** Renders the two diagonal resize handles (top-right = start, bottom-left = end). */
   editing?: boolean;
   onResizeHandleDown?: (edge: ResizeEdge, e: ReactPointerEvent) => void;
@@ -107,19 +125,26 @@ export function EventBlockBody({
   variant = "tint",
   heightPx,
   nested = false,
+  continuesBefore = false,
+  continuesAfter = false,
   editing = false,
   onResizeHandleDown,
 }: EventBlockBodyProps) {
   const color = CALENDAR_COLORS[colorName];
   const isSolid = variant === "solid";
   const showDetails = heightPx >= DETAIL_DISCLOSURE_THRESHOLD_PX;
+  const RADIUS = 7;
 
   return (
     <div className="relative h-full w-full">
       <div
-        className="h-full w-full overflow-hidden rounded-[7px]"
+        className="h-full w-full overflow-hidden"
         style={{
           backgroundColor: isSolid ? color.accent : color.tint,
+          borderTopLeftRadius: continuesBefore ? 0 : RADIUS,
+          borderTopRightRadius: continuesBefore ? 0 : RADIUS,
+          borderBottomLeftRadius: continuesAfter ? 0 : RADIUS,
+          borderBottomRightRadius: continuesAfter ? 0 : RADIUS,
           boxShadow: editing
             ? "0 6px 18px rgba(0,0,0,0.28)"
             : nested

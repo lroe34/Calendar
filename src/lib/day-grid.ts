@@ -1,3 +1,5 @@
+import { startOfDay } from "./date-utils";
+
 export const HOUR_HEIGHT_PX = 64;
 export const PX_PER_MINUTE = HOUR_HEIGHT_PX / 60;
 /** Pinch-to-zoom bounds for the day-view hour grid. The rendered hour height
@@ -36,6 +38,50 @@ export function snapMinutes(minutes: number, increment: number = SNAP_MINUTES): 
 
 export function clamp(value: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, value));
+}
+
+/** The slice of a timed event that falls on a single calendar day. Multi-day
+ *  events (ones whose start/end straddle midnight, or span several days)
+ *  produce one segment per day they touch, each clipped to that day's
+ *  midnight bounds. */
+export interface EventDaySegment {
+  /** Minutes since midnight where the event's portion on this day begins
+   *  (0 when the event started on an earlier day). */
+  startMin: number;
+  /** Minutes since midnight where it ends on this day (MINUTES_IN_DAY when it
+   *  continues into a later day). */
+  endMin: number;
+  /** The event began on an earlier calendar day. */
+  continuesBefore: boolean;
+  /** The event ends on a later calendar day. */
+  continuesAfter: boolean;
+}
+
+/**
+ * The portion of a timed event visible on `day`, clipped to that day's
+ * midnight bounds — or null if the event doesn't overlap the day at all.
+ * `startIso`/`endIso` are the event's raw start/end; the event's interval is
+ * treated as half-open `[start, end)`, so an event ending exactly at midnight
+ * belongs to the day it started, not the following one.
+ */
+export function timedEventDaySegment(
+  startIso: string,
+  endIso: string,
+  day: Date,
+): EventDaySegment | null {
+  const dayStart = startOfDay(day).getTime();
+  const dayEnd = dayStart + MINUTES_IN_DAY * 60_000;
+  const start = new Date(startIso).getTime();
+  const end = new Date(endIso).getTime();
+
+  if (start >= dayEnd || end <= dayStart) return null;
+
+  return {
+    startMin: start <= dayStart ? 0 : Math.round((start - dayStart) / 60_000),
+    endMin: end >= dayEnd ? MINUTES_IN_DAY : Math.round((end - dayStart) / 60_000),
+    continuesBefore: start < dayStart,
+    continuesAfter: end > dayEnd,
+  };
 }
 
 /** Local-naive `YYYY-MM-DDTHH:mm:00` (same shape the mock data uses), built
