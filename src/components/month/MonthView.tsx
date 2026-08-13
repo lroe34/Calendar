@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CalendarEvent, CalendarSource } from "@/lib/types";
-import { dateKey, generateCalendarMonths, MONTH_NAMES } from "@/lib/date-utils";
+import { dateKey, generateCalendarMonths, MONTH_ABBR } from "@/lib/date-utils";
 import { TopNavBar } from "@/components/shared/TopNavBar";
 import { TRANSITION_MS, TRANSITION_MS_AFTER_EXIT, TRANSITION_EASE } from "@/lib/transition-constants";
 import { MonthWeekdayHeader } from "./MonthWeekdayHeader";
@@ -42,6 +42,11 @@ export function MonthView({
   transition = null,
 }: MonthViewProps) {
   const calendarsById = useMemo(() => new Map(calendars.map((c) => [c.id, c])), [calendars]);
+  const selectedWeekTime = useMemo(() => {
+    if (!transition) return null;
+    const [year, month, day] = transition.selectedWeekKey.split("-").map(Number);
+    return new Date(year, month, day).getTime();
+  }, [transition]);
 
   const sections = useMemo(
     () =>
@@ -145,7 +150,7 @@ export function MonthView({
             </div>
             <div className="px-4 pb-1 pt-1">
               <h1 className="text-[34px] font-bold leading-tight">
-                {MONTH_NAMES[visibleSection.month]}
+                {MONTH_ABBR[visibleSection.month]}
               </h1>
             </div>
             <MonthWeekdayHeader highlightColumn={todayColumn} />
@@ -154,15 +159,13 @@ export function MonthView({
         <div className="">
           {sections.map((section, i) => {
           const firstOfMonthColumn = new Date(section.year, section.month, 1).getDay();
-          // Clamp so the label never starts so close to the right edge that
-          // a long month name (e.g. "September") would run off-screen.
-          const labelColumn = Math.min(firstOfMonthColumn, 4);
+          const labelColumn = firstOfMonthColumn;
           // The section's month-name header sits above all its weeks, so it
           // travels with whichever direction is true at this point in the
           // chronological scan (mirrors the "before"/"after" row treatment).
           const headerPhase: WeekTransitionPhase | null = !transition
             ? null
-            : dateKey(section.weeks[0].days[0].date) > transition.selectedWeekKey
+            : section.weeks[0].days[0].date.getTime() > selectedWeekTime!
               ? "after"
               : "before";
           const headerIsOff = transition
@@ -198,7 +201,7 @@ export function MonthView({
                   className="whitespace-nowrap pl-1 text-[26px] font-bold leading-tight"
                   style={{ gridColumnStart: labelColumn + 1 }}
                 >
-                  {MONTH_NAMES[section.month]}
+                  {MONTH_ABBR[section.month]}
                 </h2>
               </div>
               {section.weeks.map((week) => {
@@ -208,7 +211,7 @@ export function MonthView({
                   ? null
                   : isSelectedWeek
                     ? "selected"
-                    : weekKey > transition.selectedWeekKey
+                    : week.days[0].date.getTime() > selectedWeekTime!
                       ? "after"
                       : "before";
                 return (
