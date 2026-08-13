@@ -48,6 +48,10 @@ interface HourGridProps {
   /** When set, render a dimmed ghost of the editing event at this time. */
   ghost?: GhostSpec | null;
   onEventLongPress?: (info: EventLongPressInfo) => void;
+  /** Only the first column in a multi-day range owns the shared time gutter. */
+  showTimeGutter?: boolean;
+  /** Multi-day ranges draw the current-time rule through every column. */
+  showCurrentTime?: boolean;
 }
 
 const GUTTER_WIDTH_PX = 52;
@@ -74,6 +78,8 @@ export function HourGrid({
   editingEventId = null,
   ghost = null,
   onEventLongPress,
+  showTimeGutter = true,
+  showCurrentTime = isToday,
 }: HourGridProps) {
   const hourHeight = useHourHeight();
 
@@ -194,21 +200,23 @@ export function HourGrid({
         return (
           <div
             key={hour}
-            className="absolute inset-x-0 border-t border-black/[.07] ml-12 dark:border-white/[.1]"
-            style={{ top: hour * hourHeight }}
+            className="absolute inset-x-0 border-t border-black/[.07] dark:border-white/[.1]"
+            style={{ top: hour * hourHeight, left: showTimeGutter ? GUTTER_WIDTH_PX : 0 }}
           >
-            <span
-              className="absolute -translate-y-1/2 -translate-x-14 text-right text-[11px] text-black/40 dark:text-white/40"
-              style={{ left: 4, width: GUTTER_WIDTH_PX - 10 }}
-            >
-              <span className="font-medium text-black/60 dark:text-white/60 text-[12px]">{value}</span>
-              {period && <span className="ml-0.5 text-[9px]">{period}</span>}
-            </span>
+            {showTimeGutter && (
+              <span
+                className="absolute -translate-y-1/2 -translate-x-14 text-right text-[11px] text-black/40 dark:text-white/40"
+                style={{ left: 4, width: GUTTER_WIDTH_PX - 10 }}
+              >
+                <span className="font-medium text-black/60 dark:text-white/60 text-[12px]">{value}</span>
+                {period && <span className="ml-0.5 text-[9px]">{period}</span>}
+              </span>
+            )}
           </div>
         );
       })}
 
-      <div className="absolute inset-y-0" style={{ left: GUTTER_WIDTH_PX, right: 8 }}>
+      <div className="absolute inset-y-0" style={{ left: showTimeGutter ? GUTTER_WIDTH_PX : 0, right: 8 }}>
         {events.map((event) => {
           if (event.id === editingEventId) return null; // shown as ghost + pinned copy
           const l = layoutById.get(event.id);
@@ -244,7 +252,7 @@ export function HourGrid({
         )}
       </div>
 
-      {isToday && <CurrentTimeLine />}
+      {showCurrentTime && <CurrentTimeLine showGutter={showTimeGutter} />}
     </div>
   );
 }

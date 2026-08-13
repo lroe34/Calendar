@@ -47,6 +47,10 @@ interface DayContentPaneProps {
   /** The per-day heading is redundant when the week strip labels each column. */
   hideDayHeading?: boolean;
   initializeScroll?: boolean;
+  showTimeGutter?: boolean;
+  showCurrentTime?: boolean;
+  sharedSubHeaderHeight?: number;
+  onSubHeaderHeightChange?: (height: number) => void;
 }
 
 export function DayContentPane({
@@ -66,6 +70,10 @@ export function DayContentPane({
   synchronizedScrollContainers,
   hideDayHeading = false,
   initializeScroll = true,
+  showTimeGutter = true,
+  showCurrentTime,
+  sharedSubHeaderHeight,
+  onSubHeaderHeightChange,
 }: DayContentPaneProps) {
   const isToday = isSameDay(date, today);
   const hourHeight = useHourHeight();
@@ -140,12 +148,16 @@ export function DayContentPane({
   }, [date.getTime(), allDayEvents.length, dayReminders.length]);
 
   useEffect(() => {
-    const el = subHeaderRef.current;
+    const el = headerContentRef.current;
     if (!el) return;
-    const observer = new ResizeObserver(([entry]) => setSubHeaderHeight(entry.contentRect.height));
+    const observer = new ResizeObserver(([entry]) => {
+      const height = entry.contentRect.height;
+      setSubHeaderHeight(height);
+      onSubHeaderHeightChange?.(height);
+    });
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [onSubHeaderHeightChange]);
 
   // Both enter and exit use WAAPI so they share the same animation driver as
   // FlyingDayNumbers — identical engine, easing, and start frame across the
@@ -273,7 +285,7 @@ export function DayContentPane({
         onScroll={handleScroll}
         style={{
           ...contentStyle,
-          paddingTop: topOffset + subHeaderHeight,
+          paddingTop: topOffset + (sharedSubHeaderHeight ?? subHeaderHeight),
           // Locked during an on-grid edit so the drag can't native-scroll the
           // grid out from under the pinned copy (touch-action alone can't stop
           // a scroll the browser already latched at touchstart).
@@ -289,13 +301,15 @@ export function DayContentPane({
           editingEventId={editingEventId}
           ghost={ghost}
           onEventLongPress={onEventLongPress}
+          showTimeGutter={showTimeGutter}
+          showCurrentTime={showCurrentTime}
         />
       </div>
 
       <div
         ref={subHeaderRef}
         className="absolute inset-x-0 z-10 border-b border-black/[.06] bg-white/60 backdrop-blur-sm dark:border-white/[.08] dark:bg-black/60"
-        style={subHeaderStyle}
+        style={{ ...subHeaderStyle, minHeight: sharedSubHeaderHeight }}
       >
         <div ref={headerContentRef} style={headerContentStyle}>
           {!hideDayHeading && <DayHeading date={date} />}

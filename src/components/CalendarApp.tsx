@@ -113,7 +113,7 @@ function measureMonthRects(weekDays: Date[]): (FlyingRect | null)[] {
 export function CalendarApp() {
   const today = startOfDay(new Date());
   const [screen, setScreen] = useState<Screen>("month");
-  const [desktopWeek, setDesktopWeek] = useState(false);
+  const [showsMultipleDays, setShowsMultipleDays] = useState(false);
   const [selectedDate, setSelectedDate] = useState(today);
   const [transition, setTransition] = useState<Transition | null>(null);
   const [yearTransition, setYearTransition] = useState<YearTransition | null>(null);
@@ -124,8 +124,8 @@ export function CalendarApp() {
   const [calendarListOpen, setCalendarListOpen] = useState(false);
 
   useLayoutEffect(() => {
-    const query = window.matchMedia("(min-width: 1024px)");
-    const update = () => setDesktopWeek(query.matches);
+    const query = window.matchMedia("(min-width: 768px)");
+    const update = () => setShowsMultipleDays(query.matches);
     update();
     query.addEventListener("change", update);
     return () => query.removeEventListener("change", update);
@@ -478,7 +478,7 @@ export function CalendarApp() {
           toRects={transition.toRects}
           armed={transition.armed}
           pillAppears={transition.mode === "toDay"}
-          todayPillOnly={desktopWeek}
+          todayPillOnly={showsMultipleDays}
         />
       )}
 
