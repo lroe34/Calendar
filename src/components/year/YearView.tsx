@@ -1,7 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, type CSSProperties } from "react";
-import { BottomBar } from "@/components/shared/BottomBar";
+import { useEffect, useLayoutEffect, useRef, type CSSProperties } from "react";
 import { PlusIcon, SearchIcon } from "@/components/shared/Icons";
 import { TRANSITION_MS, TRANSITION_EASE } from "@/lib/transition-constants";
 import type { FlyingRect } from "@/components/transitions/FlyingDayNumbers";
@@ -22,14 +21,13 @@ interface YearViewProps {
   today: Date;
   anchorYear: number;
   onSelectMonth: (year: number, month: number) => void;
-  onGridView?: () => void;
   transition?: YearViewTransition | null;
 }
 
 const YEARS_BEFORE = 1;
 const YEARS_AFTER = 1;
 
-export function YearView({ today, anchorYear, onSelectMonth, onGridView, transition = null }: YearViewProps) {
+export function YearView({ today, anchorYear, onSelectMonth, transition = null }: YearViewProps) {
   const years = Array.from(
     { length: YEARS_BEFORE + YEARS_AFTER + 1 },
     (_, i) => anchorYear - YEARS_BEFORE + i,
@@ -55,6 +53,11 @@ export function YearView({ today, anchorYear, onSelectMonth, onGridView, transit
     const idx = years.indexOf(today.getFullYear());
     if (idx >= 0) scrollToIndex(idx, true);
   }
+
+  useEffect(() => {
+    document.addEventListener("calendar-today", handleToday);
+    return () => document.removeEventListener("calendar-today", handleToday);
+  });
 
   // Per-card pixel offset that pushes each of the target month's 11 siblings
   // further out past the viewport edge, along the line from the target card
@@ -226,10 +229,6 @@ export function YearView({ today, anchorYear, onSelectMonth, onGridView, transit
             <PlusIcon className="h-5 w-5" />
           </button>
         </div>
-      </div>
-
-      <div className="absolute inset-x-0 bottom-0 z-40">
-        <BottomBar onToday={handleToday} onGridView={onGridView} inboxBadge={1} />
       </div>
     </div>
   );

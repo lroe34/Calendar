@@ -4,7 +4,6 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CalendarEvent, CalendarSource } from "@/lib/types";
 import { dateKey, generateCalendarMonths, MONTH_NAMES } from "@/lib/date-utils";
 import { TopNavBar } from "@/components/shared/TopNavBar";
-import { BottomBar } from "@/components/shared/BottomBar";
 import { TRANSITION_MS, TRANSITION_MS_AFTER_EXIT, TRANSITION_EASE } from "@/lib/transition-constants";
 import { MonthWeekdayHeader } from "./MonthWeekdayHeader";
 import { MonthWeekRow, weekOffTransform, type WeekTransitionPhase } from "./MonthWeekRow";
@@ -24,7 +23,6 @@ interface MonthViewProps {
   calendars: CalendarSource[];
   onSelectDate: (date: Date) => void;
   onBack: (year: number, month: number) => void;
-  onGridView?: () => void;
   transition?: MonthViewTransition | null;
 }
 
@@ -41,7 +39,6 @@ export function MonthView({
   calendars,
   onSelectDate,
   onBack,
-  onGridView,
   transition = null,
 }: MonthViewProps) {
   const calendarsById = useMemo(() => new Map(calendars.map((c) => [c.id, c])), [calendars]);
@@ -114,9 +111,10 @@ export function MonthView({
     if (idx >= 0) scrollToSection(idx, true);
   }
 
-  // Weeks render in chronological order across sections, so a single running
-  // flag tells us whether we've reached the transitioning row yet.
-  let seenSelectedWeek = false;
+  useEffect(() => {
+    document.addEventListener("calendar-today", handleToday);
+    return () => document.removeEventListener("calendar-today", handleToday);
+  });
 
   const chromeIsOff = transition ? (transition.mode === "exit" ? transition.armed : !transition.armed) : false;
   const chromeStyle = transition
@@ -164,7 +162,7 @@ export function MonthView({
           // chronological scan (mirrors the "before"/"after" row treatment).
           const headerPhase: WeekTransitionPhase | null = !transition
             ? null
-            : seenSelectedWeek
+            : dateKey(section.weeks[0].days[0].date) > transition.selectedWeekKey
               ? "after"
               : "before";
           const headerIsOff = transition
@@ -206,8 +204,13 @@ export function MonthView({
               {section.weeks.map((week) => {
                 const weekKey = dateKey(week.days[0].date);
                 const isSelectedWeek = transition?.selectedWeekKey === weekKey;
-                const phase = !transition ? null : isSelectedWeek ? "selected" : seenSelectedWeek ? "after" : "before";
-                if (isSelectedWeek) seenSelectedWeek = true;
+                const phase = !transition
+                  ? null
+                  : isSelectedWeek
+                    ? "selected"
+                    : weekKey > transition.selectedWeekKey
+                      ? "after"
+                      : "before";
                 return (
                   <MonthWeekRow
                     key={weekKey}
@@ -239,10 +242,6 @@ export function MonthView({
           backLabel={`${visibleSection.year}`}
           onBack={() => onBack(visibleSection.year, visibleSection.month)}
         />
-      </div>
-
-      <div className="absolute inset-x-0 bottom-0 z-40" style={navStyle}>
-        <BottomBar onToday={handleToday} onGridView={onGridView} />
       </div>
     </div>
   );

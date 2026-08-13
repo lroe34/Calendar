@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import type { CalendarColorName, CalendarEvent, CalendarSource, Reminder } from "@/lib/types";
-import { MONTH_NAMES, addDays, isSameDay, startOfDay } from "@/lib/date-utils";
+import { MONTH_NAMES, addDays, isSameDay, startOfDay, startOfWeek } from "@/lib/date-utils";
 import {
   EVENT_EDGE_GAP_PX,
   HOUR_HEIGHT_PX,
@@ -17,7 +17,6 @@ import {
   snapMinutes,
 } from "@/lib/day-grid";
 import { TopNavBar } from "@/components/shared/TopNavBar";
-import { BottomBar } from "@/components/shared/BottomBar";
 import { TRANSITION_MS, TRANSITION_EASE } from "@/lib/transition-constants";
 import { MiniWeekStrip } from "./MiniWeekStrip";
 import { DayContentPane } from "./DayContentPane";
@@ -46,7 +45,6 @@ interface DayViewProps {
   onBack: () => void;
   onSelectEvent: (event: CalendarEvent) => void;
   onUpdateEventTimes?: (id: string, startIso: string, endIso: string) => void;
-  onGridView?: () => void;
   transition?: DayViewTransition | null;
 }
 
@@ -292,10 +290,18 @@ export function DayView({
   onBack,
   onSelectEvent,
   onUpdateEventTimes,
-  onGridView,
   transition = null,
 }: DayViewProps) {
   const calendarsById = useMemo(() => new Map(calendars.map((c) => [c.id, c])), [calendars]);
+  const [showsFullWeek, setShowsFullWeek] = useState(false);
+
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 1024px)");
+    const update = () => setShowsFullWeek(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
 
   // ---- Pinch-to-zoom hour height ----
   // The rendered height of one hour. Owned here (above both swipeable panes) so
@@ -378,7 +384,6 @@ export function DayView({
   const baseScrollRef = useRef<HTMLDivElement | null>(null);
   // Height of the floating bottom bar, so the drag's lower bound stops above it
   // rather than letting the block slide behind the buttons.
-  const bottomBarRef = useRef<HTMLDivElement | null>(null);
   const bottomInsetRef = useRef(0);
   // Edge auto-scroll: a rAF loop that keeps scrolling (and retiming the event)
   // while the drag's active edge sits in the top/bottom band, even if the
@@ -388,7 +393,7 @@ export function DayView({
   const lastEditPointerYRef = useRef(0);
 
   useEffect(() => {
-    const el = bottomBarRef.current;
+    const el = document.querySelector<HTMLElement>("[data-calendar-bottom-bar]");
     if (!el) return;
     const measure = () => (bottomInsetRef.current = el.getBoundingClientRect().height);
     measure();
@@ -864,6 +869,12 @@ export function DayView({
     setSwipe({ neighborDate: target, direction });
   }
 
+  useEffect(() => {
+    const handleToday = () => navigateTo(today);
+    document.addEventListener("calendar-today", handleToday);
+    return () => document.removeEventListener("calendar-today", handleToday);
+  });
+
   // The neighbor pane's transform is set imperatively (never read from a ref
   // during render — refs aren't render inputs), so its first frame needs to
   // be placed as soon as it mounts, before the browser paints.
@@ -979,7 +990,10 @@ export function DayView({
       phaseRef.current = "drag";
       applyOffset(0, d.direction, getContainerWidth());
       d.samples = [{ x: e.clientX, t: e.timeStamp }];
-      setSwipe({ neighborDate: addDays(selectedDate, d.direction), direction: d.direction });
+      setSwipe({
+        neighborDate: addDays(selectedDate, d.direction * (showsFullWeek ? 7 : 1)),
+        direction: d.direction,
+      });
     }
     if (d.locked !== "x" || d.direction === null) return;
 
@@ -1033,15 +1047,50 @@ export function DayView({
 
   const miniStripDate = swipe && swipeCrossedMidpoint ? swipe.neighborDate : selectedDate;
 
-  // Which pane (if any) currently shows the edited event's source day — that
-  // pane hides the event's normal block and renders the dimmed ghost.
-  const baseIsSource = !!edit && isSameDay(selectedDate, edit.sourceDate);
-  const baseEditingId = baseIsSource ? edit!.event.id : null;
-  const baseGhost = baseIsSource && edit!.dragging ? { startMin: edit!.origStartMin, endMin: edit!.origEndMin } : null;
-  const neighborDate = swipe?.neighborDate ?? null;
-  const neighborIsSource = !!edit && !!neighborDate && isSameDay(neighborDate, edit.sourceDate);
-  const neighborEditingId = neighborIsSource ? edit!.event.id : null;
-  const neighborGhost = neighborIsSource && edit!.dragging ? { startMin: edit!.origStartMin, endMin: edit!.origEndMin } : null;
+  function paneDates(anchorDate: Date): Date[] {
+    if (!showsFullWeek) return [anchorDate];
+    const weekStart = startOfWeek(anchorDate);
+    return Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
+  }
+
+  function renderPaneContents(anchorDate: Date, isNeighbor: boolean) {
+    return paneDates(anchorDate).map((date) => {
+      const isSource = !!edit && isSameDay(date, edit.sourceDate);
+      const isSelectedPane = isSameDay(date, anchorDate);
+      return (
+        <div
+          key={date.getTime()}
+          className="relative h-full min-w-0 border-r border-black/[.06] last:border-r-0 dark:border-white/[.08]"
+        >
+          <DayContentPane
+            date={date}
+            today={today}
+            events={events}
+            reminders={reminders}
+            calendarsById={calendarsById}
+            onSelectEvent={onSelectEvent}
+            editingEventId={isSource ? edit!.event.id : null}
+            ghost={isSource && edit!.dragging ? { startMin: edit!.origStartMin, endMin: edit!.origEndMin } : null}
+            onEventLongPress={handleEnterEdit}
+            topOffset={headerHeight}
+            scrollLocked={!!edit}
+            scrollContainerRef={
+              !isNeighbor && (isSource || (!edit && isSelectedPane)) ? baseScrollRef : undefined
+            }
+            verticalTransition={
+              !isNeighbor && isSelectedPane && transition
+                ? {
+                    mode: transition.mode,
+                    armed: transition.armed,
+                    slideDistancePx: transition.slideDistancePx,
+                  }
+                : null
+            }
+          />
+        </div>
+      );
+    });
+  }
 
   // Quarter-hour gutter tick, only during an active drag: a single label at the
   // moving edge (the one the gesture drives), and only when it lands on a
@@ -1079,48 +1128,21 @@ export function DayView({
         onPointerCancel={handlePointerCancel}
       >
         <DayScaleContext.Provider value={hourHeight}>
-        <div ref={basePaneRef} className="absolute inset-0" style={PANE_LAYER_STYLE}>
-          <DayContentPane
-            date={selectedDate}
-            today={today}
-            events={events}
-            reminders={reminders}
-            calendarsById={calendarsById}
-            onSelectEvent={onSelectEvent}
-            editingEventId={baseEditingId}
-            ghost={baseGhost}
-            onEventLongPress={handleEnterEdit}
-            topOffset={headerHeight}
-            scrollLocked={!!edit}
-            scrollContainerRef={baseScrollRef}
-            verticalTransition={
-              transition
-                ? {
-                    mode: transition.mode,
-                    armed: transition.armed,
-                    slideDistancePx: transition.slideDistancePx,
-                  }
-                : null
-            }
-          />
+        <div
+          ref={basePaneRef}
+          className={`absolute inset-0 ${showsFullWeek ? "grid grid-cols-7" : ""}`}
+          style={PANE_LAYER_STYLE}
+        >
+          {renderPaneContents(selectedDate, false)}
         </div>
 
         {swipe && (
-          <div ref={neighborPaneRef} className="absolute inset-0" style={PANE_LAYER_STYLE}>
-            <DayContentPane
-              date={swipe.neighborDate}
-              today={today}
-              events={events}
-              reminders={reminders}
-              calendarsById={calendarsById}
-              onSelectEvent={onSelectEvent}
-              editingEventId={neighborEditingId}
-              ghost={neighborGhost}
-              onEventLongPress={handleEnterEdit}
-              topOffset={headerHeight}
-              scrollLocked={!!edit}
-              verticalTransition={null}
-            />
+          <div
+            ref={neighborPaneRef}
+            className={`absolute inset-0 ${showsFullWeek ? "grid grid-cols-7" : ""}`}
+            style={PANE_LAYER_STYLE}
+          >
+            {renderPaneContents(swipe.neighborDate, true)}
           </div>
         )}
 
@@ -1193,16 +1215,13 @@ export function DayView({
             today={today}
             onSelectDate={navigateTo}
             hiddenDayKeys={transition?.hiddenDayKeys}
+            interactive={!showsFullWeek}
           />
         </div>
       </div>
 
       <div className="absolute inset-x-0 top-0 z-40 select-none" style={chromeStyle}>
         <TopNavBar backLabel={MONTH_NAMES[selectedDate.getMonth()].slice(0, 3)} onBack={onBack} />
-      </div>
-
-      <div ref={bottomBarRef} className="absolute inset-x-0 bottom-0 z-40 select-none" style={chromeStyle}>
-        <BottomBar onToday={() => navigateTo(today)} onGridView={onGridView} />
       </div>
     </div>
   );
