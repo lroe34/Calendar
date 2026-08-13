@@ -295,6 +295,10 @@ export function DayView({
   const calendarsById = useMemo(() => new Map(calendars.map((c) => [c.id, c])), [calendars]);
   const [visibleDayCount, setVisibleDayCount] = useState<1 | 3 | 7>(1);
   const showsMultipleDays = visibleDayCount > 1;
+  // The phone layout shows one full day at a time, but its pinned header is
+  // still a week navigator. Keep all Sunday-through-Saturday labels visible
+  // there rather than coupling the header's range to the content column count.
+  const miniStripDayCount = visibleDayCount === 1 ? 7 : visibleDayCount;
   const weekScrollContainersRef = useRef<Set<HTMLDivElement>>(new Set());
   const [subHeaderHeights, setSubHeaderHeights] = useState<Record<string, number>>({});
   const reportSubHeaderHeight = useCallback((key: string, height: number) => {
@@ -1241,7 +1245,7 @@ export function DayView({
             hiddenDayKeys={transition?.hiddenDayKeys}
             interactive={!showsMultipleDays}
             desktopWeek={showsMultipleDays}
-            visibleDayCount={visibleDayCount}
+            visibleDayCount={miniStripDayCount}
           />
         </div>
       </div>
