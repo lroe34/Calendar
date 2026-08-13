@@ -9,10 +9,12 @@ interface MiniWeekStripProps {
   onSelectDate: (date: Date) => void;
   /** Date keys whose number should stay invisible (a flying clone is standing in for it). */
   hiddenDayKeys?: Set<string>;
-  /** Desktop week view uses these dates as column headings, not navigation controls. */
+  /** Multi-day views use these dates as column headings, not navigation controls. */
   interactive?: boolean;
-  /** Use compact, horizontal column labels in the desktop seven-day layout. */
+  /** Use compact, horizontal column labels in the three- and seven-day layouts. */
   desktopWeek?: boolean;
+  /** Number of visible columns in the responsive day range. */
+  visibleDayCount?: 1 | 3 | 7;
 }
 
 export function MiniWeekStrip({
@@ -22,16 +24,22 @@ export function MiniWeekStrip({
   hiddenDayKeys,
   interactive = true,
   desktopWeek = false,
+  visibleDayCount = 7,
 }: MiniWeekStripProps) {
-  const weekStart = startOfWeek(selectedDate);
-  const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const rangeStart = visibleDayCount === 7 ? startOfWeek(selectedDate) : selectedDate;
+  const days = Array.from({ length: visibleDayCount }, (_, i) => addDays(rangeStart, i));
 
   return (
-    <div data-cal-ministrip className="grid grid-cols-7 px-2 pb-2">
-      {days.map((date, i) => {
+    <div
+      data-cal-ministrip
+      className="grid px-2 pb-2"
+      style={{ gridTemplateColumns: `repeat(${visibleDayCount}, minmax(0, 1fr))` }}
+    >
+      {days.map((date) => {
         const isToday = isSameDay(date, today);
         const isSelected = isSameDay(date, selectedDate);
-        const isWeekend = i === 0 || i === 6;
+        const dayOfWeek = date.getDay();
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
         const key = dateKey(date);
         const hidden = hiddenDayKeys?.has(key) ?? false;
         return (
@@ -49,7 +57,7 @@ export function MiniWeekStrip({
                   : "text-[12px] font-medium text-black dark:text-white"
               }
             >
-              {desktopWeek ? WEEKDAY_NAMES[i].slice(0, 3) : WEEKDAY_LETTERS[i]}
+              {desktopWeek ? WEEKDAY_NAMES[dayOfWeek].slice(0, 3) : WEEKDAY_LETTERS[dayOfWeek]}
             </span>
             <span
               data-cal-daynum={key}

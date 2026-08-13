@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import type { CalendarColorName, CalendarEvent, CalendarSource, Reminder } from "@/lib/types";
-import { MONTH_NAMES, addDays, isSameDay, startOfDay, startOfWeek } from "@/lib/date-utils";
+import { MONTH_NAMES, addDays, dateKey, isSameDay, startOfDay, startOfWeek } from "@/lib/date-utils";
 import {
   EVENT_EDGE_GAP_PX,
   HOUR_HEIGHT_PX,
@@ -293,15 +293,22 @@ export function DayView({
   transition = null,
 }: DayViewProps) {
   const calendarsById = useMemo(() => new Map(calendars.map((c) => [c.id, c])), [calendars]);
-  const [showsFullWeek, setShowsFullWeek] = useState(false);
+  const [visibleDayCount, setVisibleDayCount] = useState<1 | 3 | 7>(1);
+  const showsMultipleDays = visibleDayCount > 1;
   const weekScrollContainersRef = useRef<Set<HTMLDivElement>>(new Set());
+  const [subHeaderHeights, setSubHeaderHeights] = useState<Record<string, number>>({});
+  const reportSubHeaderHeight = useCallback((key: string, height: number) => {
+    setSubHeaderHeights((current) => current[key] === height ? current : { ...current, [key]: height });
+  }, []);
 
   useEffect(() => {
-    const query = window.matchMedia("(min-width: 1024px)");
-    const update = () => setShowsFullWeek(query.matches);
+    const update = () => {
+      const width = window.innerWidth;
+      setVisibleDayCount(width >= 1024 ? 7 : width >= 768 ? 3 : 1);
+    };
     update();
-    query.addEventListener("change", update);
-    return () => query.removeEventListener("change", update);
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
   }, []);
 
   // ---- Pinch-to-zoom hour height ----
@@ -992,7 +999,7 @@ export function DayView({
       applyOffset(0, d.direction, getContainerWidth());
       d.samples = [{ x: e.clientX, t: e.timeStamp }];
       setSwipe({
-        neighborDate: addDays(selectedDate, d.direction * (showsFullWeek ? 7 : 1)),
+        neighborDate: addDays(selectedDate, d.direction * visibleDayCount),
         direction: d.direction,
       });
     }
@@ -1049,13 +1056,17 @@ export function DayView({
   const miniStripDate = swipe && swipeCrossedMidpoint ? swipe.neighborDate : selectedDate;
 
   function paneDates(anchorDate: Date): Date[] {
-    if (!showsFullWeek) return [anchorDate];
-    const weekStart = startOfWeek(anchorDate);
-    return Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
+    const rangeStart = visibleDayCount === 7 ? startOfWeek(anchorDate) : anchorDate;
+    return Array.from({ length: visibleDayCount }, (_, index) => addDays(rangeStart, index));
   }
 
   function renderPaneContents(anchorDate: Date, isNeighbor: boolean) {
-    return paneDates(anchorDate).map((date) => {
+    const dates = paneDates(anchorDate);
+    const sharedSubHeaderHeight = showsMultipleDays
+      ? Math.max(0, ...dates.map((date) => subHeaderHeights[dateKey(date)] ?? 0))
+      : undefined;
+    const rangeIncludesToday = dates.some((date) => isSameDay(date, today));
+    return dates.map((date, index) => {
       const isSource = !!edit && isSameDay(date, edit.sourceDate);
       const isSelectedPane = isSameDay(date, anchorDate);
       return (
@@ -1074,15 +1085,21 @@ export function DayView({
             ghost={isSource && edit!.dragging ? { startMin: edit!.origStartMin, endMin: edit!.origEndMin } : null}
             onEventLongPress={handleEnterEdit}
             topOffset={headerHeight}
-            hideDayHeading={showsFullWeek}
-            initializeScroll={!showsFullWeek || isSelectedPane}
-            synchronizedScrollContainers={showsFullWeek ? weekScrollContainersRef : undefined}
+            hideDayHeading={showsMultipleDays}
+            initializeScroll={!showsMultipleDays || isSelectedPane}
+            synchronizedScrollContainers={showsMultipleDays ? weekScrollContainersRef : undefined}
+            showTimeGutter={!showsMultipleDays || index === 0}
+            showCurrentTime={showsMultipleDays ? rangeIncludesToday : undefined}
+            sharedSubHeaderHeight={sharedSubHeaderHeight}
+            onSubHeaderHeightChange={
+              showsMultipleDays ? (height) => reportSubHeaderHeight(dateKey(date), height) : undefined
+            }
             scrollLocked={!!edit}
             scrollContainerRef={
               !isNeighbor && (isSource || (!edit && isSelectedPane)) ? baseScrollRef : undefined
             }
             verticalTransition={
-              !isNeighbor && transition && (showsFullWeek || isSelectedPane)
+              !isNeighbor && transition && (showsMultipleDays || isSelectedPane)
                 ? {
                     mode: transition.mode,
                     armed: transition.armed,
@@ -1134,8 +1151,8 @@ export function DayView({
         <DayScaleContext.Provider value={hourHeight}>
         <div
           ref={basePaneRef}
-          className={`absolute inset-0 ${showsFullWeek ? "grid grid-cols-7" : ""}`}
-          style={PANE_LAYER_STYLE}
+          className="absolute inset-0 grid"
+          style={{ ...PANE_LAYER_STYLE, gridTemplateColumns: `repeat(${visibleDayCount}, minmax(0, 1fr))` }}
         >
           {renderPaneContents(selectedDate, false)}
         </div>
@@ -1143,8 +1160,8 @@ export function DayView({
         {swipe && (
           <div
             ref={neighborPaneRef}
-            className={`absolute inset-0 ${showsFullWeek ? "grid grid-cols-7" : ""}`}
-            style={PANE_LAYER_STYLE}
+            className="absolute inset-0 grid"
+            style={{ ...PANE_LAYER_STYLE, gridTemplateColumns: `repeat(${visibleDayCount}, minmax(0, 1fr))` }}
           >
             {renderPaneContents(swipe.neighborDate, true)}
           </div>
@@ -1222,8 +1239,9 @@ export function DayView({
             today={today}
             onSelectDate={navigateTo}
             hiddenDayKeys={transition?.hiddenDayKeys}
-            interactive={!showsFullWeek}
-            desktopWeek={showsFullWeek}
+            interactive={!showsMultipleDays}
+            desktopWeek={showsMultipleDays}
+            visibleDayCount={visibleDayCount}
           />
         </div>
       </div>

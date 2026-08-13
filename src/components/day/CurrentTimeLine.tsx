@@ -6,7 +6,11 @@ import { useDayScale } from "./DayScaleContext";
 
 const GUTTER_WIDTH_PX = 52;
 
-export function CurrentTimeLine() {
+interface CurrentTimeLineProps {
+  showGutter?: boolean;
+}
+
+export function CurrentTimeLine({ showGutter = true }: CurrentTimeLineProps) {
   const { minutesToPx } = useDayScale();
   const [now, setNow] = useState(() => new Date());
 
@@ -21,20 +25,24 @@ export function CurrentTimeLine() {
 
   return (
     <div className="pointer-events-none absolute inset-x-0 z-10" style={{ top }}>
-      <div
-        className="absolute -translate-y-1/2 rounded-full bg-red-500 px-1.5 py-[1px] text-[11px] font-semibold text-white"
-        style={{ left: 4 }}
-      >
-        {label}
-      </div>
+      {showGutter && (
+        <div
+          className="absolute -translate-y-1/2 rounded-full bg-red-500 px-1.5 py-[1px] text-[11px] font-semibold text-white"
+          style={{ left: 4 }}
+        >
+          {label}
+        </div>
+      )}
       <div
         className="absolute h-px bg-red-500"
-        style={{ left: GUTTER_WIDTH_PX, right: 0, top: 0 }}
+        style={{ left: showGutter ? GUTTER_WIDTH_PX : 0, right: 0, top: 0 }}
       />
-      <div
-        className="absolute h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-red-500"
-        style={{ left: GUTTER_WIDTH_PX - 3 }}
-      />
+      {showGutter && (
+        <div
+          className="absolute h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-red-500"
+          style={{ left: GUTTER_WIDTH_PX - 3 }}
+        />
+      )}
     </div>
   );
 }
