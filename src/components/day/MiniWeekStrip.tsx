@@ -1,6 +1,6 @@
 "use client";
 
-import { WEEKDAY_LETTERS, dateKey, isSameDay, startOfWeek, addDays } from "@/lib/date-utils";
+import { WEEKDAY_LETTERS, WEEKDAY_NAMES, dateKey, isSameDay, startOfWeek, addDays } from "@/lib/date-utils";
 import { TRANSITION_MS, TRANSITION_EASE } from "@/lib/transition-constants";
 
 interface MiniWeekStripProps {
@@ -11,6 +11,8 @@ interface MiniWeekStripProps {
   hiddenDayKeys?: Set<string>;
   /** Desktop week view uses these dates as column headings, not navigation controls. */
   interactive?: boolean;
+  /** Use compact, horizontal column labels in the desktop seven-day layout. */
+  desktopWeek?: boolean;
 }
 
 export function MiniWeekStrip({
@@ -19,6 +21,7 @@ export function MiniWeekStrip({
   onSelectDate,
   hiddenDayKeys,
   interactive = true,
+  desktopWeek = false,
 }: MiniWeekStripProps) {
   const weekStart = startOfWeek(selectedDate);
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -37,7 +40,7 @@ export function MiniWeekStrip({
             type="button"
             disabled={!interactive}
             onClick={() => onSelectDate(date)}
-            className="flex flex-col items-center gap-1 py-1 disabled:cursor-default"
+            className={`flex items-center justify-center py-1 disabled:cursor-default ${desktopWeek ? "flex-row gap-1" : "flex-col gap-1"}`}
           >
             <span
               className={
@@ -46,7 +49,7 @@ export function MiniWeekStrip({
                   : "text-[12px] font-medium text-black dark:text-white"
               }
             >
-              {WEEKDAY_LETTERS[i]}
+              {desktopWeek ? WEEKDAY_NAMES[i].slice(0, 3) : WEEKDAY_LETTERS[i]}
             </span>
             <span
               data-cal-daynum={key}
@@ -60,14 +63,14 @@ export function MiniWeekStrip({
                 aria-hidden
                 className={`absolute inset-0 rounded-full ${isToday ? "bg-red-500" : "bg-black dark:bg-white"}`}
                 style={{
-                  opacity: isSelected ? 1 : 0,
-                  transform: isSelected ? "scale(1)" : "scale(0.8)",
+                  opacity: isToday || (!desktopWeek && isSelected) ? 1 : 0,
+                  transform: isToday || (!desktopWeek && isSelected) ? "scale(1)" : "scale(0.8)",
                   transition: `opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}, transform ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
                 }}
               />
               <span
                 className={`relative text-[17px] ${
-                  isSelected
+                  isToday || (!desktopWeek && isSelected)
                     ? `font-bold ${isToday ? "text-white" : "text-white dark:text-black"}`
                     : isToday
                       ? "text-red-500"

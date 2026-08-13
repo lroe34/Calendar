@@ -294,6 +294,7 @@ export function DayView({
 }: DayViewProps) {
   const calendarsById = useMemo(() => new Map(calendars.map((c) => [c.id, c])), [calendars]);
   const [showsFullWeek, setShowsFullWeek] = useState(false);
+  const weekScrollContainersRef = useRef<Set<HTMLDivElement>>(new Set());
 
   useEffect(() => {
     const query = window.matchMedia("(min-width: 1024px)");
@@ -1073,12 +1074,15 @@ export function DayView({
             ghost={isSource && edit!.dragging ? { startMin: edit!.origStartMin, endMin: edit!.origEndMin } : null}
             onEventLongPress={handleEnterEdit}
             topOffset={headerHeight}
+            hideDayHeading={showsFullWeek}
+            initializeScroll={!showsFullWeek || isSelectedPane}
+            synchronizedScrollContainers={showsFullWeek ? weekScrollContainersRef : undefined}
             scrollLocked={!!edit}
             scrollContainerRef={
               !isNeighbor && (isSource || (!edit && isSelectedPane)) ? baseScrollRef : undefined
             }
             verticalTransition={
-              !isNeighbor && isSelectedPane && transition
+              !isNeighbor && transition && (showsFullWeek || isSelectedPane)
                 ? {
                     mode: transition.mode,
                     armed: transition.armed,
@@ -1210,12 +1214,16 @@ export function DayView({
           <div className="invisible" aria-hidden>
             <TopNavBar backLabel={MONTH_NAMES[selectedDate.getMonth()].slice(0, 3)} onBack={onBack} />
           </div>
+          <div className="px-4 pb-1 pt-1">
+            <h1 className="text-[34px] font-bold leading-tight">{MONTH_NAMES[selectedDate.getMonth()]}</h1>
+          </div>
           <MiniWeekStrip
             selectedDate={miniStripDate}
             today={today}
             onSelectDate={navigateTo}
             hiddenDayKeys={transition?.hiddenDayKeys}
             interactive={!showsFullWeek}
+            desktopWeek={showsFullWeek}
           />
         </div>
       </div>
