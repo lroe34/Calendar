@@ -9,9 +9,17 @@ interface MiniWeekStripProps {
   onSelectDate: (date: Date) => void;
   /** Date keys whose number should stay invisible (a flying clone is standing in for it). */
   hiddenDayKeys?: Set<string>;
+  /** Desktop week view uses these dates as column headings, not navigation controls. */
+  interactive?: boolean;
 }
 
-export function MiniWeekStrip({ selectedDate, today, onSelectDate, hiddenDayKeys }: MiniWeekStripProps) {
+export function MiniWeekStrip({
+  selectedDate,
+  today,
+  onSelectDate,
+  hiddenDayKeys,
+  interactive = true,
+}: MiniWeekStripProps) {
   const weekStart = startOfWeek(selectedDate);
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
@@ -26,8 +34,10 @@ export function MiniWeekStrip({ selectedDate, today, onSelectDate, hiddenDayKeys
         return (
           <button
             key={date.toISOString()}
+            type="button"
+            disabled={!interactive}
             onClick={() => onSelectDate(date)}
-            className="flex flex-col items-center gap-1 py-1"
+            className="flex flex-col items-center gap-1 py-1 disabled:cursor-default"
           >
             <span
               className={

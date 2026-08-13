@@ -7,6 +7,7 @@ import { YearView } from "@/components/year/YearView";
 import { EventDetailSheet } from "@/components/event-sheet/EventDetailSheet";
 import { CalendarListDrawer } from "@/components/shared/CalendarListDrawer";
 import { CalendarEditDrawer } from "@/components/shared/CalendarEditDrawer";
+import { BottomBar } from "@/components/shared/BottomBar";
 import { FlyingDayNumbers, type FlyingRect } from "@/components/transitions/FlyingDayNumbers";
 import { calendars as initialCalendars, events as initialEvents, reminders } from "@/lib/mock-data";
 import { addDays, dateKey, startOfDay, startOfWeek } from "@/lib/date-utils";
@@ -394,7 +395,6 @@ export function CalendarApp() {
             calendars={calendars}
             onSelectDate={handleSelectDateFromMonth}
             onBack={handleGoToYear}
-            onGridView={() => setCalendarListOpen(true)}
             transition={
               transition
                 ? {
@@ -415,7 +415,6 @@ export function CalendarApp() {
             today={today}
             anchorYear={yearTransition ? yearTransition.year : yearViewAnchor}
             onSelectMonth={handleSelectMonthFromYear}
-            onGridView={() => setCalendarListOpen(true)}
             transition={
               yearTransition
                 ? {
@@ -443,7 +442,6 @@ export function CalendarApp() {
             onBack={handleBackToMonth}
             onSelectEvent={(event) => setOpenEventId(event.id)}
             onUpdateEventTimes={handleUpdateEventTimes}
-            onGridView={() => setCalendarListOpen(true)}
             transition={
               transition
                 ? {
@@ -474,6 +472,18 @@ export function CalendarApp() {
         />
       )}
 
+      {/* One persistent toolbar remains mounted while view layers transition.
+          Today, Calendar, and Inbox are therefore the same DOM buttons in
+          every view rather than coincident copies whose geometry can drift. */}
+      <div className="fixed inset-x-0 bottom-0 z-50 select-none">
+        <BottomBar
+          onToday={() => {
+            if (!transition && !yearTransition) document.dispatchEvent(new Event("calendar-today"));
+          }}
+          onGridView={() => setCalendarListOpen(true)}
+          inboxBadge={1}
+        />
+      </div>
       {sheetEvent && (
         <EventDetailSheet
           key={sheetEvent.id}
