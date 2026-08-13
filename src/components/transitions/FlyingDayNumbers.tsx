@@ -30,6 +30,8 @@ interface FlyingDayNumbersProps {
    * appearing/disappearing on `activeDate`.
    */
   pillAppears: boolean;
+  /** Desktop week headings only retain today's red marker, never a selected-day black pill. */
+  todayPillOnly?: boolean;
 }
 
 export function FlyingDayNumbers({
@@ -40,6 +42,7 @@ export function FlyingDayNumbers({
   toRects,
   armed,
   pillAppears,
+  todayPillOnly = false,
 }: FlyingDayNumbersProps) {
   // toDay: month's today-highlight → day's selected pill.
   // toMonth: day's selected pill → month's today-highlight.
@@ -97,7 +100,9 @@ export function FlyingDayNumbers({
         if (toRects && toRects[i] === null) return null;
 
         const isToday = isSameDay(date, today);
-        const pillVisible = isSameDay(date, armed ? pillToDate : pillFromDate);
+        const pillVisible = todayPillOnly
+          ? isToday
+          : isSameDay(date, armed ? pillToDate : pillFromDate);
 
         return (
           <div

@@ -113,6 +113,7 @@ function measureMonthRects(weekDays: Date[]): (FlyingRect | null)[] {
 export function CalendarApp() {
   const today = startOfDay(new Date());
   const [screen, setScreen] = useState<Screen>("month");
+  const [desktopWeek, setDesktopWeek] = useState(false);
   const [selectedDate, setSelectedDate] = useState(today);
   const [transition, setTransition] = useState<Transition | null>(null);
   const [yearTransition, setYearTransition] = useState<YearTransition | null>(null);
@@ -121,6 +122,14 @@ export function CalendarApp() {
   const [calendars, setCalendars] = useState<CalendarSource[]>(initialCalendars);
   const [openEventId, setOpenEventId] = useState<string | null>(null);
   const [calendarListOpen, setCalendarListOpen] = useState(false);
+
+  useLayoutEffect(() => {
+    const query = window.matchMedia("(min-width: 1024px)");
+    const update = () => setDesktopWeek(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
   const [editingCalendarId, setEditingCalendarId] = useState<string | null>(null);
   const editingCalendar = editingCalendarId
     ? (calendars.find((c) => c.id === editingCalendarId) ?? null)
@@ -469,6 +478,7 @@ export function CalendarApp() {
           toRects={transition.toRects}
           armed={transition.armed}
           pillAppears={transition.mode === "toDay"}
+          todayPillOnly={desktopWeek}
         />
       )}
 
