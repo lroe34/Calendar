@@ -42,3 +42,31 @@ body {
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
+@keyframes calendar-event-created {
+  0% {
+    transform: scale(0.95);
+  }
+  32% {
+    transform: scale(1.13);
+  }
+  56% {
+    transform: scale(0.975);
+  }
+  78% {
+    transform: scale(1.035);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.calendar-event-created {
+  animation: calendar-event-created 300ms linear both;
+  transform-origin: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .calendar-event-created {
+    animation: none;
+  }
+}
