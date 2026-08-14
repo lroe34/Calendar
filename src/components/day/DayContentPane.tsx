@@ -8,7 +8,7 @@ import { TRANSITION_MS, TRANSITION_EASE } from "@/lib/transition-constants";
 import { DayHeading } from "./DayHeading";
 import { AllDayLane } from "./AllDayLane";
 import { useHourHeight } from "./DayScaleContext";
-import { HourGrid, type EventLongPressInfo, type GhostSpec } from "./HourGrid";
+import { HourGrid, type EmptyGridPressInfo, type EventLongPressInfo, type GhostSpec } from "./HourGrid";
 
 /** Vertical month-week &lt;-&gt; mini-strip transition, forwarded from DayView's
  *  own `transition` prop. Only ever set on the pane matching the live
@@ -31,6 +31,7 @@ interface DayContentPaneProps {
   editingEventId?: string | null;
   ghost?: GhostSpec | null;
   onEventLongPress?: (info: EventLongPressInfo) => void;
+  onEmptyGridPress?: (info: EmptyGridPressInfo) => void;
   /** Height of the pinned chrome (nav spacer + mini week strip) this pane sits below. */
   topOffset: number;
   verticalTransition?: DayPaneVerticalTransition | null;
@@ -44,6 +45,10 @@ interface DayContentPaneProps {
   /** Desktop week view registers every column here so one vertical scroll can
    *  be mirrored across the whole week. */
   synchronizedScrollContainers?: React.MutableRefObject<Set<HTMLDivElement>>;
+  /** Last scroll offset shared by every mounted/current/incoming pane. Reading
+   * it in the ref callback initializes a new pane before the browser paints,
+   * avoiding a one-frame flash at midnight during day/week navigation. */
+  sharedScrollTopRef?: React.MutableRefObject<number | null>;
   /** The per-day heading is redundant when the week strip labels each column. */
   hideDayHeading?: boolean;
   initializeScroll?: boolean;
@@ -63,11 +68,13 @@ export function DayContentPane({
   editingEventId = null,
   ghost = null,
   onEventLongPress,
+  onEmptyGridPress,
   topOffset,
   verticalTransition = null,
   scrollLocked = false,
   scrollContainerRef,
   synchronizedScrollContainers,
+  sharedScrollTopRef,
   hideDayHeading = false,
   initializeScroll = true,
   showTimeGutter = true,
@@ -109,6 +116,9 @@ export function DayContentPane({
   const setScrollRef = (el: HTMLDivElement | null) => {
     if (scrollRef.current) synchronizedScrollContainers?.current.delete(scrollRef.current);
     scrollRef.current = el;
+    if (el && sharedScrollTopRef?.current !== null && sharedScrollTopRef?.current !== undefined) {
+      el.scrollTop = sharedScrollTopRef.current;
+    }
     if (el && synchronizedScrollContainers) {
       // A neighboring week mounts only after a horizontal swipe starts. Give
       // each of its columns the already-visible week's scroll position before
@@ -123,7 +133,9 @@ export function DayContentPane({
 
   const handleScroll = () => {
     const source = scrollRef.current;
-    if (!source || !synchronizedScrollContainers) return;
+    if (!source) return;
+    if (sharedScrollTopRef) sharedScrollTopRef.current = source.scrollTop;
+    if (!synchronizedScrollContainers) return;
     synchronizedScrollContainers.current.forEach((container) => {
       if (container !== source && container.scrollTop !== source.scrollTop) {
         container.scrollTop = source.scrollTop;
@@ -134,12 +146,21 @@ export function DayContentPane({
   useLayoutEffect(() => {
     const container = scrollRef.current;
     if (!container || !initializeScroll) return;
+    // Once the day view has established a scroll position, navigation should
+    // preserve it. Re-running the date-focused default here would overwrite
+    // the correctly initialized incoming pane at the end of the swipe and
+    // produce the visible second jump.
+    if (sharedScrollTopRef?.current !== null && sharedScrollTopRef?.current !== undefined) {
+      container.scrollTop = sharedScrollTopRef.current;
+      return;
+    }
     const scrollToMinutes = isToday ? new Date().getHours() * 60 + new Date().getMinutes() : 8 * 60;
     // Uses the current hour height (not the default) so a mid-zoom day change
     // still lands at the right time; intentionally not a dep — zooming must not
     // re-run this and yank the scroll position.
     const target = Math.max(0, (scrollToMinutes / 60) * hourHeight - 120);
     container.scrollTop = target;
+    if (sharedScrollTopRef) sharedScrollTopRef.current = target;
     synchronizedScrollContainers?.current.forEach((peer) => {
       if (peer !== container) peer.scrollTop = target;
     });
@@ -312,6 +333,7 @@ export function DayContentPane({
           editingEventId={editingEventId}
           ghost={ghost}
           onEventLongPress={onEventLongPress}
+          onEmptyGridPress={onEmptyGridPress}
           showTimeGutter={showTimeGutter}
           showCurrentTime={showCurrentTime}
         />

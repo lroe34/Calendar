@@ -22,7 +22,7 @@ import { MiniWeekStrip } from "./MiniWeekStrip";
 import { DayContentPane } from "./DayContentPane";
 import { DayScaleContext } from "./DayScaleContext";
 import { EventBlockBody, type ResizeEdge } from "./EventBlock";
-import type { EventLongPressInfo } from "./HourGrid";
+import type { EmptyGridPressInfo, EventLongPressInfo } from "./HourGrid";
 
 export interface DayViewTransition {
   mode: "exit" | "enter";
@@ -45,6 +45,8 @@ interface DayViewProps {
   onBack: () => void;
   onSelectEvent: (event: CalendarEvent) => void;
   onUpdateEventTimes?: (id: string, startIso: string, endIso: string) => void;
+  onCreateEvent?: (event: CalendarEvent) => void;
+  onFinishCreatingEvent?: (event: CalendarEvent) => void;
   transition?: DayViewTransition | null;
 }
 
@@ -290,6 +292,8 @@ export function DayView({
   onBack,
   onSelectEvent,
   onUpdateEventTimes,
+  onCreateEvent,
+  onFinishCreatingEvent,
   transition = null,
 }: DayViewProps) {
   const calendarsById = useMemo(() => new Map(calendars.map((c) => [c.id, c])), [calendars]);
@@ -300,6 +304,11 @@ export function DayView({
   // there rather than coupling the header's range to the content column count.
   const miniStripDayCount = visibleDayCount === 1 ? 7 : visibleDayCount;
   const weekScrollContainersRef = useRef<Set<HTMLDivElement>>(new Set());
+  // Persists the vertical hour-grid position independently of pane lifecycle.
+  // Incoming mobile days and desktop weeks read this while their DOM refs are
+  // attached, before first paint, rather than rendering at midnight and being
+  // corrected by a later layout effect.
+  const sharedScrollTopRef = useRef<number | null>(null);
   const [subHeaderHeights, setSubHeaderHeights] = useState<Record<string, number>>({});
   const reportSubHeaderHeight = useCallback((key: string, height: number) => {
     setSubHeaderHeights((current) => current[key] === height ? current : { ...current, [key]: height });
@@ -389,6 +398,7 @@ export function DayView({
 
   // ---- On-grid edit (move/resize), owned above the panes for cross-day drag ----
   const [edit, setEdit] = useState<EditSession | null>(null);
+  const creatingEventIdRef = useRef<string | null>(null);
   const editPointerRef = useRef<number | null>(null);
   const editGestureRef = useRef<EditGesture | null>(null);
   // The base (selected-day) pane's scroll element — driven directly while
@@ -687,6 +697,32 @@ export function DayView({
     if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(8);
   }
 
+  function handleCreateEvent(info: EmptyGridPressInfo) {
+    if (transition || pinchRef.current || edit) return;
+    const calendar = calendars.find((candidate) => candidate.visible) ?? calendars[0];
+    if (!calendar) return;
+    const newEvent: CalendarEvent = {
+      id: `event-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      calendarId: calendar.id,
+      title: "New Event",
+      start: minutesToLocalIso(info.date, info.startMin),
+      end: minutesToLocalIso(info.date, info.startMin + 60),
+      isAllDay: false,
+      showAs: "busy",
+    };
+    creatingEventIdRef.current = newEvent.id;
+    onCreateEvent?.(newEvent);
+    handleEnterEdit({
+      event: newEvent,
+      colorName: calendar.color,
+      rect: info.rect,
+      origStartMin: info.startMin,
+      origEndMin: info.startMin + 60,
+      pointerId: info.pointerId,
+      clientY: info.clientY,
+    });
+  }
+
   // Re-grab the resting picked-up copy to move it again (already in edit mode).
   function handleOverlayPointerDown(e: ReactPointerEvent) {
     if (!edit) return;
@@ -782,6 +818,11 @@ export function DayView({
     const current = events.find((ev) => ev.id === edit.event.id);
     if (!current || current.start !== startIso || current.end !== endIso) {
       onUpdateEventTimes?.(edit.event.id, startIso, endIso);
+    }
+    if (creatingEventIdRef.current === edit.event.id) {
+      creatingEventIdRef.current = null;
+      onFinishCreatingEvent?.({ ...edit.event, start: startIso, end: endIso });
+      setEdit(null);
     }
   }
 
@@ -1100,10 +1141,12 @@ export function DayView({
             editingEventId={isSource ? edit!.event.id : null}
             ghost={isSource && edit!.dragging ? { startMin: edit!.origStartMin, endMin: edit!.origEndMin } : null}
             onEventLongPress={handleEnterEdit}
+            onEmptyGridPress={handleCreateEvent}
             topOffset={headerHeight}
             hideDayHeading={showsMultipleDays}
             initializeScroll={!isNeighbor && (!showsMultipleDays || isSelectedPane)}
             synchronizedScrollContainers={showsMultipleDays ? weekScrollContainersRef : undefined}
+            sharedScrollTopRef={sharedScrollTopRef}
             showTimeGutter={!showsMultipleDays || index === 0}
             showCurrentTime={showsMultipleDays ? rangeIncludesToday : undefined}
             sharedSubHeaderHeight={sharedMountedSubHeaderHeight}
@@ -1212,7 +1255,7 @@ export function DayView({
 
             {/* The pinned picked-up copy: stays put while days slide underneath. */}
             <div
-              className="absolute z-30"
+              className={`absolute z-30 ${creatingEventIdRef.current === edit.event.id ? "calendar-event-created" : ""}`}
               style={{
                 top: overlayTopPx(edit),
                 left: edit.anchorLeft,

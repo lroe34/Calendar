@@ -74,6 +74,7 @@ export function EventBlock({
 
   return (
     <div
+      data-calendar-event-block
       onClick={ghost ? undefined : onClick}
       onPointerDown={ghost ? undefined : onPointerDown}
       className="absolute text-left"

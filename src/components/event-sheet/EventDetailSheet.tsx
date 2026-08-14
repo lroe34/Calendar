@@ -35,6 +35,7 @@ interface EventDetailSheetProps {
   onOpenChange: (open: boolean) => void;
   onSave: (updated: CalendarEvent) => void;
   onDelete: (id: string) => void;
+  initiallyEditing?: boolean;
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -128,8 +129,9 @@ export function EventDetailSheet({
   onOpenChange,
   onSave,
   onDelete,
+  initiallyEditing = false,
 }: EventDetailSheetProps) {
-  const [mode, setMode] = useState<"view" | "edit">("view");
+  const [mode, setMode] = useState<"view" | "edit">(initiallyEditing ? "edit" : "view");
   const [draft, setDraft] = useState<CalendarEvent>(event);
 
   // Re-sync whenever the sheet (re)opens, so a stale edit draft never leaks
@@ -141,7 +143,7 @@ export function EventDetailSheet({
     setWasOpen(open);
     if (open) {
       setDraft(event);
-      setMode("view");
+      setMode(initiallyEditing ? "edit" : "view");
     }
   }
 
@@ -256,6 +258,8 @@ export function EventDetailSheet({
                 <div className="w-1 shrink-0 self-stretch rounded-full" style={{ backgroundColor: color.accent }} />
                 <div className="flex flex-1 flex-col gap-2.5">
                   <input
+                    autoFocus={initiallyEditing}
+                    onFocus={(e) => initiallyEditing && e.currentTarget.select()}
                     value={draft.title}
                     onChange={(e) => patch({ title: e.target.value })}
                     className="w-full truncate rounded-2xl bg-white px-4 py-3 text-[19px] font-bold outline-none dark:bg-white/10"

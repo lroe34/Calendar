@@ -30,6 +30,17 @@ export interface EventLongPressInfo {
   clientY: number;
 }
 
+/** A press on empty grid space that should create and immediately pick up a
+ * new event. Mouse presses fire immediately; touch/pen presses use the same
+ * deliberate long-press threshold as existing-event pickup. */
+export interface EmptyGridPressInfo {
+  date: Date;
+  startMin: number;
+  rect: { top: number; left: number; width: number; height: number };
+  pointerId: number;
+  clientY: number;
+}
+
 /** Ghost placeholder shown at the event's original time while it's dragged. */
 export interface GhostSpec {
   startMin: number;
@@ -48,6 +59,7 @@ interface HourGridProps {
   /** When set, render a dimmed ghost of the editing event at this time. */
   ghost?: GhostSpec | null;
   onEventLongPress?: (info: EventLongPressInfo) => void;
+  onEmptyGridPress?: (info: EmptyGridPressInfo) => void;
   /** Only the first column in a multi-day range owns the shared time gutter. */
   showTimeGutter?: boolean;
   /** Multi-day ranges draw the current-time rule through every column. */
@@ -78,6 +90,7 @@ export function HourGrid({
   editingEventId = null,
   ghost = null,
   onEventLongPress,
+  onEmptyGridPress,
   showTimeGutter = true,
   showCurrentTime = isToday,
 }: HourGridProps) {
@@ -108,6 +121,12 @@ export function HourGrid({
   const layoutById = new Map(layout.map((l) => [l.id, l]));
 
   const pendingRef = useRef<PendingPress | null>(null);
+  const emptyPressRef = useRef<{
+    pointerId: number;
+    startClientX: number;
+    startClientY: number;
+    fired: boolean;
+  } | null>(null);
   const timerRef = useRef<number | null>(null);
 
   function clearTimer() {
@@ -160,6 +179,13 @@ export function HourGrid({
   }
 
   function handleRootPointerMove(e: ReactPointerEvent) {
+    const empty = emptyPressRef.current;
+    if (empty && empty.pointerId === e.pointerId && !empty.fired) {
+      if (Math.hypot(e.clientX - empty.startClientX, e.clientY - empty.startClientY) > LONG_PRESS_MOVE_TOLERANCE_PX) {
+        emptyPressRef.current = null;
+        clearTimer();
+      }
+    }
     const p = pendingRef.current;
     if (!p || p.pointerId !== e.pointerId || p.firedEdit) return;
     const dx = e.clientX - p.startClientX;
@@ -173,12 +199,56 @@ export function HourGrid({
   }
 
   function handleRootPointerUp(e: ReactPointerEvent) {
+    if (emptyPressRef.current?.pointerId === e.pointerId) emptyPressRef.current = null;
     const p = pendingRef.current;
     pendingRef.current = null;
     clearTimer();
     if (!p || p.pointerId !== e.pointerId) return;
     // Clean press-release with no hold and no movement is a tap → open the sheet.
     if (!p.firedEdit && !p.moved) onSelectEvent?.(p.event);
+  }
+
+  function handleEmptyPointerDown(e: ReactPointerEvent) {
+    if (
+      (e.target as Element).closest("[data-calendar-event-block]") ||
+      (e.pointerType === "mouse" && e.button !== 0)
+    ) return;
+    const rootRect = e.currentTarget.getBoundingClientRect();
+    const contentLeft = rootRect.left + (showTimeGutter ? GUTTER_WIDTH_PX : 0);
+    const startMin = Math.max(0, Math.min(23 * 60, Math.round(((e.clientY - rootRect.top) / hourHeight) * 4) * 15));
+    const info: EmptyGridPressInfo = {
+      date,
+      startMin,
+      rect: {
+        top: rootRect.top + (startMin / 60) * hourHeight + 2,
+        left: contentLeft,
+        width: rootRect.right - 8 - contentLeft,
+        height: hourHeight - 4,
+      },
+      pointerId: e.pointerId,
+      clientY: e.clientY,
+    };
+    const fire = () => {
+      const pending = emptyPressRef.current;
+      if (!pending || pending.pointerId !== e.pointerId || pending.fired) return;
+      pending.fired = true;
+      onEmptyGridPress?.(info);
+    };
+    emptyPressRef.current = {
+      pointerId: e.pointerId,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      fired: false,
+    };
+    clearTimer();
+    if (e.pointerType === "mouse") {
+      fire();
+      // Creation owns this mouse gesture from its first frame; don't also arm
+      // the day view's horizontal swipe recognizer while the event is moving.
+      e.stopPropagation();
+    } else {
+      timerRef.current = window.setTimeout(fire, LONG_PRESS_MS);
+    }
   }
 
   const editingEvent = editingEventId ? events.find((e) => e.id === editingEventId) : null;
@@ -194,6 +264,7 @@ export function HourGrid({
       style={{ height: hourHeight * 24 }}
       onPointerMove={handleRootPointerMove}
       onPointerUp={handleRootPointerUp}
+      onPointerDown={handleEmptyPointerDown}
     >
       {Array.from({ length: 24 }, (_, hour) => {
         const { value, period } = formatHourParts(hour);

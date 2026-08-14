@@ -121,6 +121,7 @@ export function CalendarApp() {
   const [events, setEvents] = useState<CalendarEvent[]>(initialEvents);
   const [calendars, setCalendars] = useState<CalendarSource[]>(initialCalendars);
   const [openEventId, setOpenEventId] = useState<string | null>(null);
+  const [newEventId, setNewEventId] = useState<string | null>(null);
   const [calendarListOpen, setCalendarListOpen] = useState(false);
 
   useLayoutEffect(() => {
@@ -315,6 +316,12 @@ export function CalendarApp() {
 
   function handleSaveEvent(updated: CalendarEvent) {
     setEvents((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+    if (updated.id === newEventId) setNewEventId(null);
+  }
+
+  function handleCreateEvent(event: CalendarEvent) {
+    setEvents((prev) => [...prev, event]);
+    setNewEventId(event.id);
   }
 
   // Shared "retime an event" path — used both by the detail-sheet edit form
@@ -451,6 +458,11 @@ export function CalendarApp() {
             onBack={handleBackToMonth}
             onSelectEvent={(event) => setOpenEventId(event.id)}
             onUpdateEventTimes={handleUpdateEventTimes}
+            onCreateEvent={handleCreateEvent}
+            onFinishCreatingEvent={(event) => {
+              setEvents((prev) => prev.map((item) => item.id === event.id ? event : item));
+              setOpenEventId(event.id);
+            }}
             transition={
               transition
                 ? {
@@ -501,10 +513,14 @@ export function CalendarApp() {
           calendars={calendars}
           open={openEventId !== null}
           onOpenChange={(isOpen) => {
-            if (!isOpen) setOpenEventId(null);
+            if (!isOpen) {
+              setOpenEventId(null);
+              setNewEventId(null);
+            }
           }}
           onSave={handleSaveEvent}
           onDelete={handleDeleteEvent}
+          initiallyEditing={sheetEvent.id === newEventId}
         />
       )}
 
