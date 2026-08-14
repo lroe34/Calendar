@@ -1073,10 +1073,13 @@ export function DayView({
     return dates.map((date, index) => {
       const isSource = !!edit && isSameDay(date, edit.sourceDate);
       const isSelectedPane = isSameDay(date, anchorDate);
+      const isDesktopWeekend = visibleDayCount === 7 && (date.getDay() === 0 || date.getDay() === 6);
       return (
         <div
           key={date.getTime()}
-          className="relative h-full min-w-0 border-r border-black/[.06] last:border-r-0 dark:border-white/[.08]"
+          className={`relative h-full min-w-0 border-r border-black/[.06] last:border-r-0 dark:border-white/[.08] ${
+            isDesktopWeekend ? "bg-black/[.025] dark:bg-white/[.055]" : ""
+          }`}
         >
           <DayContentPane
             date={date}
@@ -1143,9 +1146,11 @@ export function DayView({
       <div
         ref={swipeContainerRef}
         data-day-swipe
-        className={`pointer-events-auto absolute inset-0 ${edit ? "select-none" : ""}`}
+        className="pointer-events-auto absolute inset-0 select-none"
         // During an edit, lock native scrolling so one finger retimes and a
-        // second can still drive the JS day-swipe.
+        // second can still drive the JS day-swipe. Text selection stays
+        // disabled at rest as well so a desktop mouse swipe cannot highlight
+        // calendar labels or event text before the gesture locks horizontally.
         style={{ touchAction: edit ? "none" : "pan-y" }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
@@ -1235,7 +1240,7 @@ export function DayView({
           <div className="invisible" aria-hidden>
             <TopNavBar backLabel={MONTH_NAMES[selectedDate.getMonth()].slice(0, 3)} onBack={onBack} />
           </div>
-          <div className="px-4 pb-1 pt-1">
+          <div className="hidden px-4 pb-1 pt-1 lg:block">
             <h1 className="text-[34px] font-bold leading-tight">{MONTH_NAMES[selectedDate.getMonth()]}</h1>
           </div>
           <MiniWeekStrip
