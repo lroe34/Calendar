@@ -209,7 +209,12 @@ export function EventDetailSheet({
   const hasInvitees = mode === "edit" || (draft.attendees && draft.attendees.length > 0);
 
   return (
-    <Drawer.Root open={open} onOpenChange={onOpenChange} dismissible={mode === "view"}>
+    <Drawer.Root
+      open={open}
+      onOpenChange={onOpenChange}
+      dismissible={mode === "view"}
+      fixed
+    >
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 z-40 bg-black/30" />
         <Drawer.Content
