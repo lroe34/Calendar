@@ -109,7 +109,15 @@ export function DayContentPane({
   const setScrollRef = (el: HTMLDivElement | null) => {
     if (scrollRef.current) synchronizedScrollContainers?.current.delete(scrollRef.current);
     scrollRef.current = el;
-    if (el) synchronizedScrollContainers?.current.add(el);
+    if (el && synchronizedScrollContainers) {
+      // A neighboring week mounts only after a horizontal swipe starts. Give
+      // each of its columns the already-visible week's scroll position before
+      // the first paint instead of briefly showing midnight (or running its
+      // own per-date initial scroll and changing the visible week).
+      const existingContainer = synchronizedScrollContainers.current.values().next().value;
+      if (existingContainer) el.scrollTop = existingContainer.scrollTop;
+      synchronizedScrollContainers.current.add(el);
+    }
     if (scrollContainerRef) scrollContainerRef.current = el;
   };
 
@@ -132,6 +140,9 @@ export function DayContentPane({
     // re-run this and yank the scroll position.
     const target = Math.max(0, (scrollToMinutes / 60) * hourHeight - 120);
     container.scrollTop = target;
+    synchronizedScrollContainers?.current.forEach((peer) => {
+      if (peer !== container) peer.scrollTop = target;
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date.getTime(), initializeScroll]);
 

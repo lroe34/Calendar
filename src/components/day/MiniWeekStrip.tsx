@@ -42,6 +42,10 @@ export function MiniWeekStrip({
         const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
         const key = dateKey(date);
         const hidden = hiddenDayKeys?.has(key) ?? false;
+        // Desktop week view always marks today. In the mobile day view, the
+        // circle belongs to the selected date; today stays red text until the
+        // user selects it.
+        const showDateHighlight = desktopWeek ? isToday : isSelected;
         return (
           <button
             key={date.toISOString()}
@@ -52,9 +56,9 @@ export function MiniWeekStrip({
           >
             <span
               className={
-                isWeekend
-                  ? "text-[12px] font-medium text-black/45 dark:text-white/45"
-                  : "text-[12px] font-medium text-black dark:text-white"
+                `${desktopWeek && visibleDayCount === 7 ? "text-[17px]" : "text-[12px]"} font-medium ${
+                  isWeekend ? "text-black/45 dark:text-white/45" : "text-black dark:text-white"
+                }`
               }
             >
               {desktopWeek ? WEEKDAY_NAMES[dayOfWeek].slice(0, 3) : WEEKDAY_LETTERS[dayOfWeek]}
@@ -71,14 +75,14 @@ export function MiniWeekStrip({
                 aria-hidden
                 className={`absolute inset-0 rounded-full ${isToday ? "bg-red-500" : "bg-black dark:bg-white"}`}
                 style={{
-                  opacity: isToday || (!desktopWeek && isSelected) ? 1 : 0,
-                  transform: isToday || (!desktopWeek && isSelected) ? "scale(1)" : "scale(0.8)",
+                  opacity: showDateHighlight ? 1 : 0,
+                  transform: showDateHighlight ? "scale(1)" : "scale(0.8)",
                   transition: `opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}, transform ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
                 }}
               />
               <span
                 className={`relative text-[17px] ${
-                  isToday || (!desktopWeek && isSelected)
+                  showDateHighlight
                     ? `font-bold ${isToday ? "text-white" : "text-white dark:text-black"}`
                     : isToday
                       ? "text-red-500"
