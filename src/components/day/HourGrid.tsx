@@ -31,7 +31,8 @@ export interface EventLongPressInfo {
 }
 
 /** A press on empty grid space that should create and immediately pick up a
- * new event. Mouse presses fire immediately; touch/pen presses use the same
+ * new event. Mouse clicks fire on release so a horizontal mouse drag remains
+ * available to the day-swipe recognizer; touch/pen presses use the same
  * deliberate long-press threshold as existing-event pickup. */
 export interface EmptyGridPressInfo {
   date: Date;
@@ -125,6 +126,8 @@ export function HourGrid({
     pointerId: number;
     startClientX: number;
     startClientY: number;
+    pointerType: string;
+    info: EmptyGridPressInfo;
     fired: boolean;
   } | null>(null);
   const timerRef = useRef<number | null>(null);
@@ -181,7 +184,7 @@ export function HourGrid({
   function handleRootPointerMove(e: ReactPointerEvent) {
     const empty = emptyPressRef.current;
     if (empty && empty.pointerId === e.pointerId && !empty.fired) {
-      if (Math.hypot(e.clientX - empty.startClientX, e.clientY - empty.startClientY) > LONG_PRESS_MOVE_TOLERANCE_PX) {
+      if (Math.hypot(e.clientX - empty.startClientX, e.clientY - empty.startClientY) >= LONG_PRESS_MOVE_TOLERANCE_PX) {
         emptyPressRef.current = null;
         clearTimer();
       }
@@ -192,14 +195,21 @@ export function HourGrid({
     const dy = e.clientY - p.startClientY;
     // Any real movement before the hold completes means this is a scroll or a
     // day-swipe, not an edit — drop the press and let the ancestors take it.
-    if (Math.hypot(dx, dy) > LONG_PRESS_MOVE_TOLERANCE_PX) {
+    if (Math.hypot(dx, dy) >= LONG_PRESS_MOVE_TOLERANCE_PX) {
       p.moved = true;
       clearTimer();
     }
   }
 
   function handleRootPointerUp(e: ReactPointerEvent) {
-    if (emptyPressRef.current?.pointerId === e.pointerId) emptyPressRef.current = null;
+    const empty = emptyPressRef.current;
+    if (empty?.pointerId === e.pointerId) {
+      emptyPressRef.current = null;
+      // Wait until release for a mouse click. This leaves the initial press
+      // free to bubble to DayView, where horizontal movement can become a
+      // swipe instead of creating an event on pointerdown.
+      if (empty.pointerType === "mouse" && !empty.fired) onEmptyGridPress?.(empty.info);
+    }
     const p = pendingRef.current;
     pendingRef.current = null;
     clearTimer();
@@ -238,15 +248,12 @@ export function HourGrid({
       pointerId: e.pointerId,
       startClientX: e.clientX,
       startClientY: e.clientY,
+      pointerType: e.pointerType,
+      info,
       fired: false,
     };
     clearTimer();
-    if (e.pointerType === "mouse") {
-      fire();
-      // Creation owns this mouse gesture from its first frame; don't also arm
-      // the day view's horizontal swipe recognizer while the event is moving.
-      e.stopPropagation();
-    } else {
+    if (e.pointerType !== "mouse") {
       timerRef.current = window.setTimeout(fire, LONG_PRESS_MS);
     }
   }
