@@ -7,6 +7,7 @@ import { MONTH_NAMES, addDays, dateKey, isSameDay, startOfDay, startOfWeek } fro
 import {
   EVENT_EDGE_GAP_PX,
   HOUR_HEIGHT_PX,
+  LONG_PRESS_MOVE_TOLERANCE_PX,
   MAX_HOUR_HEIGHT_PX,
   MINUTES_IN_DAY,
   MIN_EVENT_DURATION_MIN,
@@ -103,7 +104,9 @@ interface DragTrackState {
   samples: { x: number; t: number }[];
 }
 
-const SWIPE_LOCK_THRESHOLD_PX = 8;
+// Match the grid's press tolerance so a movement cannot become a swipe while
+// it is still eligible to create or pick up an event on release/long-press.
+const SWIPE_LOCK_THRESHOLD_PX = LONG_PRESS_MOVE_TOLERANCE_PX;
 // iOS paging scroll views commit past the halfway point...
 const SWIPE_COMMIT_DISTANCE_RATIO = 0.35;
 // ...or on any decisive flick, regardless of how far it's traveled yet — a
