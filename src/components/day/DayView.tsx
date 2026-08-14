@@ -1064,11 +1064,20 @@ export function DayView({
     return Array.from({ length: visibleDayCount }, (_, index) => addDays(rangeStart, index));
   }
 
+  // Keep the timed grids at one vertical origin across every pane that can be
+  // visible during a horizontal swipe. Computing this per week lets a taller
+  // all-day lane in either week shift that week's hour rows independently, so
+  // equal times no longer line up while the two weeks are side by side.
+  const mountedPaneDates = [
+    ...paneDates(selectedDate),
+    ...(swipe ? paneDates(swipe.neighborDate) : []),
+  ];
+  const sharedMountedSubHeaderHeight = showsMultipleDays
+    ? Math.max(0, ...mountedPaneDates.map((date) => subHeaderHeights[dateKey(date)] ?? 0))
+    : undefined;
+
   function renderPaneContents(anchorDate: Date, isNeighbor: boolean) {
     const dates = paneDates(anchorDate);
-    const sharedSubHeaderHeight = showsMultipleDays
-      ? Math.max(0, ...dates.map((date) => subHeaderHeights[dateKey(date)] ?? 0))
-      : undefined;
     const rangeIncludesToday = dates.some((date) => isSameDay(date, today));
     return dates.map((date, index) => {
       const isSource = !!edit && isSameDay(date, edit.sourceDate);
@@ -1093,11 +1102,11 @@ export function DayView({
             onEventLongPress={handleEnterEdit}
             topOffset={headerHeight}
             hideDayHeading={showsMultipleDays}
-            initializeScroll={!showsMultipleDays || isSelectedPane}
+            initializeScroll={!isNeighbor && (!showsMultipleDays || isSelectedPane)}
             synchronizedScrollContainers={showsMultipleDays ? weekScrollContainersRef : undefined}
             showTimeGutter={!showsMultipleDays || index === 0}
             showCurrentTime={showsMultipleDays ? rangeIncludesToday : undefined}
-            sharedSubHeaderHeight={sharedSubHeaderHeight}
+            sharedSubHeaderHeight={sharedMountedSubHeaderHeight}
             onSubHeaderHeightChange={
               showsMultipleDays ? (height) => reportSubHeaderHeight(dateKey(date), height) : undefined
             }
