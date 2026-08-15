@@ -209,7 +209,16 @@ export function EventDetailSheet({
   const hasInvitees = mode === "edit" || (draft.attendees && draft.attendees.length > 0);
 
   return (
-    <Drawer.Root open={open} onOpenChange={onOpenChange} dismissible={mode === "view"}>
+    <Drawer.Root
+      open={open}
+      onOpenChange={onOpenChange}
+      dismissible={mode === "view"}
+      // Keep the sheet anchored to the layout viewport on iOS. Vaul's input
+      // repositioning shrinks the entire drawer to the visual viewport when
+      // the keyboard opens, which exposes the calendar behind Safari's
+      // keyboard accessory/browser controls as a large apparent bottom gap.
+      repositionInputs={false}
+    >
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 z-40 bg-black/30" />
         <Drawer.Content
