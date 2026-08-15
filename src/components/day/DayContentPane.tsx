@@ -42,9 +42,6 @@ interface DayContentPaneProps {
    *  to read/drive it — bounding the pinned copy to the visible grid and
    *  edge-auto-scrolling. Only the base (selected-day) pane forwards it. */
   scrollContainerRef?: React.MutableRefObject<HTMLDivElement | null>;
-  /** Desktop week view registers every column here so one vertical scroll can
-   *  be mirrored across the whole week. */
-  synchronizedScrollContainers?: React.MutableRefObject<Set<HTMLDivElement>>;
   /** Last scroll offset shared by every mounted/current/incoming pane. Reading
    * it in the ref callback initializes a new pane before the browser paints,
    * avoiding a one-frame flash at midnight during day/week navigation. */
@@ -56,8 +53,6 @@ interface DayContentPaneProps {
   showCurrentTime?: boolean;
   sharedSubHeaderHeight?: number;
   onSubHeaderHeightChange?: (height: number) => void;
-  /** The multi-day range has one scroll owner around all columns. */
-  externallyScrolled?: boolean;
 }
 
 export function DayContentPane({
@@ -75,7 +70,6 @@ export function DayContentPane({
   verticalTransition = null,
   scrollLocked = false,
   scrollContainerRef,
-  synchronizedScrollContainers,
   sharedScrollTopRef,
   hideDayHeading = false,
   initializeScroll = true,
@@ -83,7 +77,6 @@ export function DayContentPane({
   showCurrentTime,
   sharedSubHeaderHeight,
   onSubHeaderHeightChange,
-  externallyScrolled = false,
 }: DayContentPaneProps) {
   const isToday = isSameDay(date, today);
   const hourHeight = useHourHeight();
@@ -117,19 +110,9 @@ export function DayContentPane({
   // Assign the scroll element to both the internal ref (used by this pane's own
   // layout effects) and the ref DayView passes down for its on-grid edit.
   const setScrollRef = (el: HTMLDivElement | null) => {
-    if (scrollRef.current) synchronizedScrollContainers?.current.delete(scrollRef.current);
     scrollRef.current = el;
     if (el && sharedScrollTopRef?.current !== null && sharedScrollTopRef?.current !== undefined) {
       el.scrollTop = sharedScrollTopRef.current;
-    }
-    if (el && synchronizedScrollContainers) {
-      // A neighboring week mounts only after a horizontal swipe starts. Give
-      // each of its columns the already-visible week's scroll position before
-      // the first paint instead of briefly showing midnight (or running its
-      // own per-date initial scroll and changing the visible week).
-      const existingContainer = synchronizedScrollContainers.current.values().next().value;
-      if (existingContainer) el.scrollTop = existingContainer.scrollTop;
-      synchronizedScrollContainers.current.add(el);
     }
     if (scrollContainerRef) scrollContainerRef.current = el;
   };
@@ -138,17 +121,11 @@ export function DayContentPane({
     const source = scrollRef.current;
     if (!source) return;
     if (sharedScrollTopRef) sharedScrollTopRef.current = source.scrollTop;
-    if (!synchronizedScrollContainers) return;
-    synchronizedScrollContainers.current.forEach((container) => {
-      if (container !== source && container.scrollTop !== source.scrollTop) {
-        container.scrollTop = source.scrollTop;
-      }
-    });
   };
 
   useLayoutEffect(() => {
     const container = scrollRef.current;
-    if (!container || !initializeScroll || externallyScrolled) return;
+    if (!container || !initializeScroll) return;
     // Once the day view has established a scroll position, navigation should
     // preserve it. Re-running the date-focused default here would overwrite
     // the correctly initialized incoming pane at the end of the swipe and
@@ -164,11 +141,8 @@ export function DayContentPane({
     const target = Math.max(0, (scrollToMinutes / 60) * hourHeight - 120);
     container.scrollTop = target;
     if (sharedScrollTopRef) sharedScrollTopRef.current = target;
-    synchronizedScrollContainers?.current.forEach((peer) => {
-      if (peer !== container) peer.scrollTop = target;
-    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date.getTime(), initializeScroll, externallyScrolled]);
+  }, [date.getTime(), initializeScroll]);
 
   // The day heading + all-day lane are pinned above the scrollable hour grid
   // (not part of the scroll flow), so the grid needs its own top offset kept
@@ -314,15 +288,12 @@ export function DayContentPane({
 
   return (
     <div
-      className={externallyScrolled ? "relative min-h-full overflow-visible" : "absolute inset-0 overflow-hidden"}
-      style={externallyScrolled ? { height: topOffset + (sharedSubHeaderHeight ?? subHeaderHeight) + hourHeight * 24 + 112 } : undefined}
+      className="absolute inset-0 overflow-hidden"
     >
       <div
-        ref={externallyScrolled ? undefined : setScrollRef}
-        className={externallyScrolled
-          ? "pointer-events-auto absolute inset-x-0 top-0 mt-3 pb-28"
-          : "no-scrollbar pointer-events-auto absolute inset-0 mt-3 overflow-y-auto pb-28"}
-        onScroll={externallyScrolled ? undefined : handleScroll}
+        ref={setScrollRef}
+        className="no-scrollbar pointer-events-auto absolute inset-0 mt-3 overflow-y-auto pb-28"
+        onScroll={handleScroll}
         style={{
           ...contentStyle,
           paddingTop: topOffset + (sharedSubHeaderHeight ?? subHeaderHeight),
@@ -349,7 +320,7 @@ export function DayContentPane({
 
       <div
         ref={subHeaderRef}
-        className={`${externallyScrolled ? "sticky" : "absolute"} inset-x-0 z-10 border-b border-black/[.06] bg-white/60 backdrop-blur-sm dark:border-white/[.08] dark:bg-black/60`}
+        className="absolute inset-x-0 z-10 border-b border-black/[.06] bg-white/60 backdrop-blur-sm dark:border-white/[.08] dark:bg-black/60"
         style={{ ...subHeaderStyle, minHeight: sharedSubHeaderHeight }}
       >
         <div ref={headerContentRef} style={headerContentStyle}>
