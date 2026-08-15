@@ -56,6 +56,8 @@ interface DayContentPaneProps {
   showCurrentTime?: boolean;
   sharedSubHeaderHeight?: number;
   onSubHeaderHeightChange?: (height: number) => void;
+  /** The multi-day range has one scroll owner around all columns. */
+  externallyScrolled?: boolean;
 }
 
 export function DayContentPane({
@@ -81,6 +83,7 @@ export function DayContentPane({
   showCurrentTime,
   sharedSubHeaderHeight,
   onSubHeaderHeightChange,
+  externallyScrolled = false,
 }: DayContentPaneProps) {
   const isToday = isSameDay(date, today);
   const hourHeight = useHourHeight();
@@ -145,7 +148,7 @@ export function DayContentPane({
 
   useLayoutEffect(() => {
     const container = scrollRef.current;
-    if (!container || !initializeScroll) return;
+    if (!container || !initializeScroll || externallyScrolled) return;
     // Once the day view has established a scroll position, navigation should
     // preserve it. Re-running the date-focused default here would overwrite
     // the correctly initialized incoming pane at the end of the swipe and
@@ -165,7 +168,7 @@ export function DayContentPane({
       if (peer !== container) peer.scrollTop = target;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date.getTime(), initializeScroll]);
+  }, [date.getTime(), initializeScroll, externallyScrolled]);
 
   // The day heading + all-day lane are pinned above the scrollable hour grid
   // (not part of the scroll flow), so the grid needs its own top offset kept
@@ -310,11 +313,16 @@ export function DayContentPane({
     : { top: topOffset };
 
   return (
-    <div className="absolute inset-0 overflow-hidden">
+    <div
+      className={externallyScrolled ? "relative min-h-full overflow-visible" : "absolute inset-0 overflow-hidden"}
+      style={externallyScrolled ? { height: topOffset + (sharedSubHeaderHeight ?? subHeaderHeight) + hourHeight * 24 + 112 } : undefined}
+    >
       <div
-        ref={setScrollRef}
-        className="no-scrollbar pointer-events-auto absolute inset-0 overflow-y-auto pb-28 mt-3"
-        onScroll={handleScroll}
+        ref={externallyScrolled ? undefined : setScrollRef}
+        className={externallyScrolled
+          ? "pointer-events-auto absolute inset-x-0 top-0 mt-3 pb-28"
+          : "no-scrollbar pointer-events-auto absolute inset-0 mt-3 overflow-y-auto pb-28"}
+        onScroll={externallyScrolled ? undefined : handleScroll}
         style={{
           ...contentStyle,
           paddingTop: topOffset + (sharedSubHeaderHeight ?? subHeaderHeight),
@@ -341,7 +349,7 @@ export function DayContentPane({
 
       <div
         ref={subHeaderRef}
-        className="absolute inset-x-0 z-10 border-b border-black/[.06] bg-white/60 backdrop-blur-sm dark:border-white/[.08] dark:bg-black/60"
+        className={`${externallyScrolled ? "sticky" : "absolute"} inset-x-0 z-10 border-b border-black/[.06] bg-white/60 backdrop-blur-sm dark:border-white/[.08] dark:bg-black/60`}
         style={{ ...subHeaderStyle, minHeight: sharedSubHeaderHeight }}
       >
         <div ref={headerContentRef} style={headerContentStyle}>
