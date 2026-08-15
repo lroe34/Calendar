@@ -308,8 +308,7 @@ export function DayView({
   // The phone layout shows one full day at a time, but its pinned header is
   // still a week navigator. Keep all Sunday-through-Saturday labels visible
   // there rather than coupling the header's range to the content column count.
-  const miniStripDayCount = visibleDayCount === 1 ? 7 : visibleDayCount;
-  const weekScrollContainersRef = useRef<Set<HTMLDivElement>>(new Set());
+  const miniStripDayCount = 7;
   // Persists the vertical hour-grid position independently of pane lifecycle.
   // Incoming mobile days and desktop weeks read this while their DOM refs are
   // attached, before first paint, rather than rendering at midnight and being
@@ -400,6 +399,19 @@ export function DayView({
   // The base (selected-day) pane's scroll element — driven directly while
   // dragging an event to reach off-screen hours.
   const baseScrollRef = useRef<HTMLDivElement | null>(null);
+
+  const attachRangePane = (el: HTMLDivElement | null, neighbor: boolean) => {
+    if (neighbor) neighborPaneRef.current = el;
+    else basePaneRef.current = el;
+    if (!showsMultipleDays || !el) return;
+    const initial = sharedScrollTopRef.current ?? Math.max(0, 8 * hourHeight - 120);
+    el.scrollTop = initial;
+    if (!neighbor) baseScrollRef.current = el;
+  };
+
+  const rememberRangeScroll = (event: React.UIEvent<HTMLDivElement>) => {
+    sharedScrollTopRef.current = event.currentTarget.scrollTop;
+  };
   // Height of the floating bottom bar, so the drag's lower bound stops above it
   // rather than letting the block slide behind the buttons.
   const bottomInsetRef = useRef(0);
@@ -1123,7 +1135,7 @@ export function DayView({
       return (
         <div
           key={date.getTime()}
-          className={`relative h-full min-w-0 border-r border-black/[.06] last:border-r-0 dark:border-white/[.08] ${
+          className={`relative min-w-0 border-r border-black/[.06] last:border-r-0 dark:border-white/[.08] ${
             isDesktopWeekend ? "bg-black/[.025] dark:bg-white/[.055]" : ""
           }`}
         >
@@ -1141,7 +1153,6 @@ export function DayView({
             topOffset={headerHeight}
             hideDayHeading={showsMultipleDays}
             initializeScroll={!isNeighbor && (!showsMultipleDays || isSelectedPane)}
-            synchronizedScrollContainers={showsMultipleDays ? weekScrollContainersRef : undefined}
             sharedScrollTopRef={sharedScrollTopRef}
             showTimeGutter={!showsMultipleDays || index === 0}
             showCurrentTime={showsMultipleDays ? rangeIncludesToday : undefined}
@@ -1162,6 +1173,7 @@ export function DayView({
                   }
                 : null
             }
+            externallyScrolled={showsMultipleDays}
           />
         </div>
       );
@@ -1207,18 +1219,20 @@ export function DayView({
       >
         <DayScaleContext.Provider value={hourHeight}>
         <div
-          ref={basePaneRef}
-          className="absolute inset-0 grid"
-          style={{ ...PANE_LAYER_STYLE, gridTemplateColumns: `repeat(${visibleDayCount}, minmax(0, 1fr))` }}
+          ref={(el) => attachRangePane(el, false)}
+          onScroll={showsMultipleDays ? rememberRangeScroll : undefined}
+          className={`absolute inset-0 grid ${showsMultipleDays ? "no-scrollbar overflow-y-auto" : ""}`}
+          style={{ ...PANE_LAYER_STYLE, gridTemplateColumns: `repeat(${visibleDayCount}, minmax(0, 1fr))`, gridAutoRows: showsMultipleDays ? "max-content" : undefined }}
         >
           {renderPaneContents(selectedDate, false)}
         </div>
 
         {swipe && (
           <div
-            ref={neighborPaneRef}
-            className="absolute inset-0 grid"
-            style={{ ...PANE_LAYER_STYLE, gridTemplateColumns: `repeat(${visibleDayCount}, minmax(0, 1fr))` }}
+            ref={(el) => attachRangePane(el, true)}
+            onScroll={showsMultipleDays ? rememberRangeScroll : undefined}
+            className={`absolute inset-0 grid ${showsMultipleDays ? "no-scrollbar overflow-y-auto" : ""}`}
+            style={{ ...PANE_LAYER_STYLE, gridTemplateColumns: `repeat(${visibleDayCount}, minmax(0, 1fr))`, gridAutoRows: showsMultipleDays ? "max-content" : undefined }}
           >
             {renderPaneContents(swipe.neighborDate, true)}
           </div>
