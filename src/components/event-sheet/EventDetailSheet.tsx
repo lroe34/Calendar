@@ -218,6 +218,7 @@ export function EventDetailSheet({
       // the keyboard opens, which exposes the calendar behind Safari's
       // keyboard accessory/browser controls as a large apparent bottom gap.
       repositionInputs={false}
+      fixed
     >
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 z-40 bg-black/30" />
