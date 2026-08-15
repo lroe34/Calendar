@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import type { CalendarColorName, CalendarEvent, CalendarSource, Reminder } from "@/lib/types";
-import { MONTH_NAMES, addDays, dateKey, isSameDay, startOfDay, startOfWeek } from "@/lib/date-utils";
+import { MONTH_NAMES, addDays, dateKey, isSameDay, startOfDay } from "@/lib/date-utils";
 import {
   EVENT_EDGE_GAP_PX,
   HOUR_HEIGHT_PX,
@@ -18,9 +18,11 @@ import {
   snapMinutes,
 } from "@/lib/day-grid";
 import { TopNavBar } from "@/components/shared/TopNavBar";
+import type { CalendarViewMode } from "@/components/shared/TopNavBar";
 import { TRANSITION_MS, TRANSITION_EASE } from "@/lib/transition-constants";
 import { MiniWeekStrip } from "./MiniWeekStrip";
 import { DayContentPane } from "./DayContentPane";
+import { CalendarListView } from "./CalendarListView";
 import { DayScaleContext } from "./DayScaleContext";
 import { EventBlockBody, type ResizeEdge } from "./EventBlock";
 import type { EmptyGridPressInfo, EventLongPressInfo } from "./HourGrid";
@@ -300,7 +302,8 @@ export function DayView({
   transition = null,
 }: DayViewProps) {
   const calendarsById = useMemo(() => new Map(calendars.map((c) => [c.id, c])), [calendars]);
-  const [visibleDayCount, setVisibleDayCount] = useState<1 | 3 | 7>(1);
+  const [viewMode, setViewMode] = useState<CalendarViewMode>("single");
+  const visibleDayCount: 1 | 2 = viewMode === "multi" ? 2 : 1;
   const showsMultipleDays = visibleDayCount > 1;
   // The phone layout shows one full day at a time, but its pinned header is
   // still a week navigator. Keep all Sunday-through-Saturday labels visible
@@ -315,16 +318,6 @@ export function DayView({
   const [subHeaderHeights, setSubHeaderHeights] = useState<Record<string, number>>({});
   const reportSubHeaderHeight = useCallback((key: string, height: number) => {
     setSubHeaderHeights((current) => current[key] === height ? current : { ...current, [key]: height });
-  }, []);
-
-  useEffect(() => {
-    const update = () => {
-      const width = window.innerWidth;
-      setVisibleDayCount(width >= 1024 ? 7 : width >= 768 ? 3 : 1);
-    };
-    update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
   }, []);
 
   // ---- Pinch-to-zoom hour height ----
@@ -1104,7 +1097,7 @@ export function DayView({
   const miniStripDate = swipe && swipeCrossedMidpoint ? swipe.neighborDate : selectedDate;
 
   function paneDates(anchorDate: Date): Date[] {
-    const rangeStart = visibleDayCount === 7 ? startOfWeek(anchorDate) : anchorDate;
+    const rangeStart = anchorDate;
     return Array.from({ length: visibleDayCount }, (_, index) => addDays(rangeStart, index));
   }
 
@@ -1126,7 +1119,7 @@ export function DayView({
     return dates.map((date, index) => {
       const isSource = !!edit && isSameDay(date, edit.sourceDate);
       const isSelectedPane = isSameDay(date, anchorDate);
-      const isDesktopWeekend = visibleDayCount === 7 && (date.getDay() === 0 || date.getDay() === 6);
+      const isDesktopWeekend = false;
       return (
         <div
           key={date.getTime()}
@@ -1198,7 +1191,7 @@ export function DayView({
 
   return (
     <div className={`fixed inset-0 overflow-hidden ${transition ? "pointer-events-none" : ""}`}>
-      <div
+      {viewMode !== "list" && <div
         ref={swipeContainerRef}
         data-day-swipe
         className="pointer-events-auto absolute inset-0 select-none"
@@ -1285,7 +1278,18 @@ export function DayView({
           </>
         )}
         </DayScaleContext.Provider>
-      </div>
+      </div>}
+
+      {viewMode === "list" && (
+        <CalendarListView
+          selectedDate={selectedDate}
+          events={events}
+          reminders={reminders}
+          calendars={calendars}
+          topOffset={headerHeight}
+          onSelectEvent={onSelectEvent}
+        />
+      )}
 
       <div ref={headerRef} className="absolute inset-x-0 top-0 z-20 select-none">
         {/* Pinned chrome: nav band + mini strip only. Day heading / all-day
@@ -1298,7 +1302,7 @@ export function DayView({
           <div className="hidden px-4 pb-1 pt-1 lg:block">
             <h1 className="text-[34px] font-bold leading-tight">{MONTH_NAMES[selectedDate.getMonth()]}</h1>
           </div>
-          <MiniWeekStrip
+          {viewMode !== "list" && <MiniWeekStrip
             selectedDate={miniStripDate}
             today={today}
             onSelectDate={navigateTo}
@@ -1306,12 +1310,12 @@ export function DayView({
             interactive={!showsMultipleDays}
             desktopWeek={showsMultipleDays}
             visibleDayCount={miniStripDayCount}
-          />
+          />}
         </div>
       </div>
 
       <div className="absolute inset-x-0 top-0 z-40 select-none" style={chromeStyle}>
-        <TopNavBar backLabel={MONTH_NAMES[selectedDate.getMonth()].slice(0, 3)} onBack={onBack} />
+        <TopNavBar backLabel={MONTH_NAMES[selectedDate.getMonth()].slice(0, 3)} onBack={onBack} viewMode={viewMode} onViewModeChange={setViewMode} />
       </div>
     </div>
   );

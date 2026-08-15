@@ -11,10 +11,10 @@ interface MiniWeekStripProps {
   hiddenDayKeys?: Set<string>;
   /** Multi-day views use these dates as column headings, not navigation controls. */
   interactive?: boolean;
-  /** Use compact, horizontal column labels in the three- and seven-day layouts. */
+  /** Use compact, horizontal column labels in multi-day layouts. */
   desktopWeek?: boolean;
   /** Number of visible columns in the responsive day range. */
-  visibleDayCount?: 1 | 3 | 7;
+  visibleDayCount?: 1 | 2 | 3 | 7;
 }
 
 export function MiniWeekStrip({

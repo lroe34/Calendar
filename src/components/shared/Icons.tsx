@@ -56,6 +56,40 @@ export function ViewSwitcherIcon({ className, style }: IconProps) {
   );
 }
 
+export function SingleDayViewIcon({ className, style }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} style={style}>
+      <path d="M5 6h1M5 10h1M5 14h1M5 18h1" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" />
+      <rect x={8} y={5} width={12} height={14} rx={2.5} stroke="currentColor" strokeWidth={1.8} />
+      <path d="M8 9h12" stroke="currentColor" strokeWidth={1.8} />
+    </svg>
+  );
+}
+
+export function MultiDayViewIcon({ className, style }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} style={style}>
+      <path d="M4 6h1M4 10h1M4 14h1M4 18h1" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" />
+      <rect x={7} y={5} width={6} height={14} rx={1.8} stroke="currentColor" strokeWidth={1.7} />
+      <rect x={13} y={5} width={7} height={14} rx={1.8} stroke="currentColor" strokeWidth={1.7} />
+      <path d="M7 9h13" stroke="currentColor" strokeWidth={1.7} />
+    </svg>
+  );
+}
+
+export function ListViewIcon({ className, style }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} style={style}>
+      {[7, 12, 17].map((y) => (
+        <g key={y}>
+          <path d={`M5 ${y}h1`} stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" />
+          <path d={`M9 ${y}h10`} stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" />
+        </g>
+      ))}
+    </svg>
+  );
+}
+
 export function CalendarGridIcon({ className, style }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className} style={style}>
