@@ -213,6 +213,11 @@ export function EventDetailSheet({
       open={open}
       onOpenChange={onOpenChange}
       dismissible={mode === "view"}
+      // Keep the sheet anchored to the layout viewport on iOS. Vaul's input
+      // repositioning shrinks the entire drawer to the visual viewport when
+      // the keyboard opens, which exposes the calendar behind Safari's
+      // keyboard accessory/browser controls as a large apparent bottom gap.
+      repositionInputs={false}
       fixed
     >
       <Drawer.Portal>
