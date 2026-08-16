@@ -6,6 +6,8 @@ import { dateKey } from "@/lib/date-utils";
 export interface RenderedBar {
   event: CalendarEvent;
   color: string;
+  tint: string;
+  textColor: string;
   continuesFromPrev: boolean;
   continuesToNext: boolean;
 }
@@ -19,6 +21,7 @@ interface MonthDayCellProps {
   onSelect: (date: Date) => void;
   /** True while this date's number is being represented by a flying clone elsewhere. */
   numberHidden?: boolean;
+  eventViewMode: "stacked" | "compact" | "details";
 }
 
 export function MonthDayCell({
@@ -29,6 +32,7 @@ export function MonthDayCell({
   overflowCount,
   onSelect,
   numberHidden,
+  eventViewMode,
 }: MonthDayCellProps) {
   if (blank) return <div />;
 
@@ -51,21 +55,30 @@ export function MonthDayCell({
         </span>
       </div>
 
-      <div className="mt-1 flex flex-col gap-[3px] px-[4px]">
-        {bars.map(({ event, color, continuesFromPrev, continuesToNext }) => (
+      <div className={`mt-1 px-[4px] ${eventViewMode === "details" ? "flex flex-col gap-1" : eventViewMode === "stacked" ? "flex flex-col gap-[3px]" : ""}`}>
+        {eventViewMode === "compact" && bars.length > 0 ? (
+          <div className="flex h-[7px] overflow-hidden rounded-full" aria-label={`${bars.length} events`}>
+            {bars.map(({ event, color }) => (
+              <span key={event.id} className="min-w-[3px] flex-1" style={{ backgroundColor: color }} />
+            ))}
+          </div>
+        ) : bars.map(({ event, color, tint, textColor, continuesFromPrev, continuesToNext }) => (
           <div
             key={event.id}
-            className="h-[7px]"
+            className={eventViewMode === "details" ? "h-6 truncate px-1.5 text-[11px] font-semibold leading-6" : "h-[7px]"}
             style={{
-              backgroundColor: color,
+              backgroundColor: eventViewMode === "details" ? tint : color,
+              color: eventViewMode === "details" ? textColor : undefined,
               marginLeft: continuesFromPrev ? "-4px" : 0,
               marginRight: continuesToNext ? "-4px" : 0,
-              borderTopLeftRadius: continuesFromPrev ? 0 : 999,
-              borderBottomLeftRadius: continuesFromPrev ? 0 : 999,
-              borderTopRightRadius: continuesToNext ? 0 : 999,
-              borderBottomRightRadius: continuesToNext ? 0 : 999,
+              borderTopLeftRadius: continuesFromPrev ? 0 : eventViewMode === "details" ? 6 : 999,
+              borderBottomLeftRadius: continuesFromPrev ? 0 : eventViewMode === "details" ? 6 : 999,
+              borderTopRightRadius: continuesToNext ? 0 : eventViewMode === "details" ? 6 : 999,
+              borderBottomRightRadius: continuesToNext ? 0 : eventViewMode === "details" ? 6 : 999,
             }}
-          />
+          >
+            {eventViewMode === "details" ? event.title : null}
+          </div>
         ))}
         {overflowCount > 0 && (
           <span className="text-center text-[11px] leading-tight text-black/40 dark:text-white/40">
