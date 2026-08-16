@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CheckIcon, ChevronLeftIcon, ListViewIcon, MultiDayViewIcon, PlusIcon, SearchIcon, SingleDayViewIcon, ViewSwitcherIcon } from "./Icons";
+import { CheckIcon, ChevronLeftIcon, ListViewIcon, PlusIcon, SearchIcon, SingleDayViewIcon, ViewSwitcherIcon } from "./Icons";
 
-export type CalendarViewMode = "single" | "multi" | "list";
+export type CalendarViewMode = "single" | "list";
 
 interface TopNavBarProps {
   backLabel: string;
@@ -16,8 +16,7 @@ interface TopNavBarProps {
 }
 
 const VIEW_OPTIONS = [
-  { mode: "single" as const, label: "Single Day", Icon: SingleDayViewIcon },
-  { mode: "multi" as const, label: "Multi Day", Icon: MultiDayViewIcon },
+  { mode: "single" as const, label: "Day", Icon: SingleDayViewIcon },
   { mode: "list" as const, label: "List", Icon: ListViewIcon },
 ];
 
@@ -60,12 +59,12 @@ export function TopNavBar({ backLabel, onBack, onViewSwitcher, viewMode, onViewM
           aria-label="Switch calendar view"
           aria-haspopup="menu"
           aria-expanded={menuOpen}
-          className="text-black dark:text-white"
+          className={`text-black dark:text-white ${onViewModeChange ? "lg:hidden" : ""}`}
         >
-          {viewMode === "multi" ? <MultiDayViewIcon className="h-5 w-5" /> : viewMode === "list" ? <ListViewIcon className="h-5 w-5" /> : viewMode === "single" ? <SingleDayViewIcon className="h-5 w-5" /> : <ViewSwitcherIcon className="h-5 w-5" />}
+          {viewMode === "list" ? <ListViewIcon className="h-5 w-5" /> : viewMode === "single" ? <SingleDayViewIcon className="h-5 w-5" /> : <ViewSwitcherIcon className="h-5 w-5" />}
         </button>
         {menuOpen && onViewModeChange && (
-          <div role="menu" aria-label="Calendar view" className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-56 overflow-hidden rounded-[1.75rem] border border-black/10 bg-white/95 p-2 shadow-2xl backdrop-blur-xl dark:border-white/15 dark:bg-neutral-900/95">
+          <div role="menu" aria-label="Calendar view" className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-56 overflow-hidden rounded-[1.75rem] border border-black/10 bg-white/95 p-2 shadow-2xl backdrop-blur-xl lg:hidden dark:border-white/15 dark:bg-neutral-900/95">
             {VIEW_OPTIONS.map(({ mode, label, Icon }) => (
               <button
                 key={mode}
