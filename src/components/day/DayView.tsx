@@ -315,6 +315,9 @@ export function DayView({
   // attached, before first paint, rather than rendering at midnight and being
   // corrected by a later layout effect.
   const sharedScrollTopRef = useRef<number | null>(null);
+  // Desktop week columns (and the adjacent week mounted during a horizontal
+  // transition) share one vertical scroll position.
+  const sharedScrollElementsRef = useRef<Set<HTMLDivElement>>(new Set());
   const [subHeaderHeights, setSubHeaderHeights] = useState<Record<string, number>>({});
   const reportSubHeaderHeight = useCallback((key: string, height: number) => {
     setSubHeaderHeights((current) => current[key] === height ? current : { ...current, [key]: height });
@@ -1155,6 +1158,7 @@ export function DayView({
             hideDayHeading={showsMultipleDays}
             initializeScroll={!isNeighbor && (showsMultipleDays || isSelectedPane)}
             sharedScrollTopRef={sharedScrollTopRef}
+            sharedScrollElementsRef={showsMultipleDays ? sharedScrollElementsRef : undefined}
             showTimeGutter={!showsMultipleDays || index === 0}
             showCurrentTime={showsMultipleDays ? rangeIncludesToday : undefined}
             sharedSubHeaderHeight={sharedMountedSubHeaderHeight}
@@ -1199,6 +1203,16 @@ export function DayView({
   const chromeIsOff = transition ? (transition.mode === "exit" ? transition.armed : !transition.armed) : false;
   const chromeStyle = transition
     ? { opacity: chromeIsOff ? 0 : 1, transition: `opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}` }
+    : undefined;
+  const listStyle: CSSProperties | undefined = transition
+    ? {
+        opacity: chromeIsOff ? 0 : 1,
+        transform:
+          chromeIsOff && transition.slideDistancePx != null
+            ? `translateY(${transition.slideDistancePx}px)`
+            : "translateY(0px)",
+        transition: `transform ${TRANSITION_MS}ms ${TRANSITION_EASE}, opacity ${TRANSITION_MS}ms ${TRANSITION_EASE}`,
+      }
     : undefined;
 
   return (
@@ -1293,14 +1307,16 @@ export function DayView({
       </div>}
 
       {activeViewMode === "list" && (
-        <CalendarListView
-          selectedDate={selectedDate}
-          events={events}
-          reminders={reminders}
-          calendars={calendars}
-          topOffset={headerHeight}
-          onSelectEvent={onSelectEvent}
-        />
+        <div className="absolute inset-0" style={listStyle}>
+          <CalendarListView
+            selectedDate={selectedDate}
+            events={events}
+            reminders={reminders}
+            calendars={calendars}
+            topOffset={headerHeight}
+            onSelectEvent={onSelectEvent}
+          />
+        </div>
       )}
 
       <div ref={headerRef} className="absolute inset-x-0 top-0 z-20 select-none">

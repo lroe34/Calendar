@@ -59,9 +59,8 @@ export function ViewSwitcherIcon({ className, style }: IconProps) {
 export function SingleDayViewIcon({ className, style }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className} style={style}>
-      <path d="M5 6h1M5 10h1M5 14h1M5 18h1" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" />
-      <rect x={8} y={5} width={12} height={14} rx={2.5} stroke="currentColor" strokeWidth={1.8} />
-      <path d="M8 9h12" stroke="currentColor" strokeWidth={1.8} />
+      <path d="M8 6h13M8 12h13M8 18h13" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />
+      <path d="M3.5 6h.01M3.5 12h.01M3.5 18h.01" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" />
     </svg>
   );
 }
@@ -80,12 +79,7 @@ export function MultiDayViewIcon({ className, style }: IconProps) {
 export function ListViewIcon({ className, style }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className} style={style}>
-      {[7, 12, 17].map((y) => (
-        <g key={y}>
-          <path d={`M5 ${y}h1`} stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" />
-          <path d={`M9 ${y}h10`} stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" />
-        </g>
-      ))}
+      <path d="M4 6h16M4 12h10M4 18h6" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

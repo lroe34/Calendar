@@ -28,7 +28,6 @@ export function MiniWeekStrip({
 }: MiniWeekStripProps) {
   const rangeStart = visibleDayCount === 7 ? startOfWeek(selectedDate) : selectedDate;
   const days = Array.from({ length: visibleDayCount }, (_, i) => addDays(rangeStart, i));
-  const selectedIndex = days.findIndex((date) => isSameDay(date, selectedDate));
 
   return (
     <div
@@ -36,16 +35,6 @@ export function MiniWeekStrip({
       className="relative grid px-2 pb-2"
       style={{ gridTemplateColumns: `repeat(${visibleDayCount}, minmax(0, 1fr))` }}
     >
-      {desktopWeek && selectedIndex >= 0 && (
-        <span
-          aria-hidden
-          className="pointer-events-none absolute bottom-2 top-1 rounded-full bg-black/[.07] dark:bg-white/[.12]"
-          style={{
-            left: `calc(.5rem + ${(selectedIndex / visibleDayCount) * 100}% - ${selectedIndex / visibleDayCount}rem)`,
-            width: `calc(${(Math.min(2, visibleDayCount - selectedIndex) / visibleDayCount) * 100}% - ${Math.min(2, visibleDayCount - selectedIndex) / visibleDayCount}rem)`,
-          }}
-        />
-      )}
       {days.map((date) => {
         const isToday = isSameDay(date, today);
         const isSelected = isSameDay(date, selectedDate);
@@ -53,9 +42,9 @@ export function MiniWeekStrip({
         const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
         const key = dateKey(date);
         const hidden = hiddenDayKeys?.has(key) ?? false;
-        // The circle belongs to the first selected date in both layouts;
-        // today stays red text until it becomes that selected date.
-        const showDateHighlight = isSelected;
+        // Desktop week headings label columns rather than selecting a date.
+        // The compact mobile day view keeps its selected-date circle.
+        const showDateHighlight = isSelected && !desktopWeek;
         return (
           <button
             key={date.toISOString()}
