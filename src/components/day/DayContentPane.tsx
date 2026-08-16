@@ -46,6 +46,9 @@ interface DayContentPaneProps {
    * it in the ref callback initializes a new pane before the browser paints,
    * avoiding a one-frame flash at midnight during day/week navigation. */
   sharedScrollTopRef?: React.MutableRefObject<number | null>;
+  /** Scroll containers that form one desktop week viewport, including an
+   * incoming/outgoing week while horizontal navigation is in progress. */
+  sharedScrollElementsRef?: React.MutableRefObject<Set<HTMLDivElement>>;
   /** The per-day heading is redundant when the week strip labels each column. */
   hideDayHeading?: boolean;
   initializeScroll?: boolean;
@@ -71,6 +74,7 @@ export function DayContentPane({
   scrollLocked = false,
   scrollContainerRef,
   sharedScrollTopRef,
+  sharedScrollElementsRef,
   hideDayHeading = false,
   initializeScroll = true,
   showTimeGutter = true,
@@ -106,14 +110,19 @@ export function DayContentPane({
   );
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const registeredScrollElementRef = useRef<HTMLDivElement | null>(null);
 
   // Assign the scroll element to both the internal ref (used by this pane's own
   // layout effects) and the ref DayView passes down for its on-grid edit.
   const setScrollRef = (el: HTMLDivElement | null) => {
+    const previous = registeredScrollElementRef.current;
+    if (previous) sharedScrollElementsRef?.current.delete(previous);
+    registeredScrollElementRef.current = el;
     scrollRef.current = el;
     if (el && sharedScrollTopRef?.current !== null && sharedScrollTopRef?.current !== undefined) {
       el.scrollTop = sharedScrollTopRef.current;
     }
+    if (el) sharedScrollElementsRef?.current.add(el);
     if (scrollContainerRef) scrollContainerRef.current = el;
   };
 
@@ -121,6 +130,11 @@ export function DayContentPane({
     const source = scrollRef.current;
     if (!source) return;
     if (sharedScrollTopRef) sharedScrollTopRef.current = source.scrollTop;
+    sharedScrollElementsRef?.current.forEach((container) => {
+      if (container !== source && container.scrollTop !== source.scrollTop) {
+        container.scrollTop = source.scrollTop;
+      }
+    });
   };
 
   useLayoutEffect(() => {
