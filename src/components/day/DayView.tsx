@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import type { CalendarColorName, CalendarEvent, CalendarSource, Reminder } from "@/lib/types";
-import { MONTH_NAMES, addDays, dateKey, isSameDay, startOfDay } from "@/lib/date-utils";
+import { MONTH_NAMES, addDays, dateKey, isSameDay, startOfDay, startOfWeek } from "@/lib/date-utils";
 import {
   EVENT_EDGE_GAP_PX,
   HOUR_HEIGHT_PX,
@@ -303,11 +303,12 @@ export function DayView({
 }: DayViewProps) {
   const calendarsById = useMemo(() => new Map(calendars.map((c) => [c.id, c])), [calendars]);
   const [viewMode, setViewMode] = useState<CalendarViewMode>("single");
-  const visibleDayCount: 1 | 2 = viewMode === "multi" ? 2 : 1;
+  const [showsFullWeek, setShowsFullWeek] = useState(false);
+  const activeViewMode: CalendarViewMode = showsFullWeek ? "single" : viewMode;
+  const visibleDayCount: 1 | 7 = showsFullWeek ? 7 : 1;
   const showsMultipleDays = visibleDayCount > 1;
-  // A single-day view keeps the week navigator, while a multi-day view labels
-  // only the dates represented by its columns. Trying to squeeze all seven
-  // labels over two mobile columns makes the date header overlap itself.
+  // Mobile keeps the full week navigator above its single-day grid. Desktop
+  // uses those same seven dates as headings for the full-week grid.
   const miniStripDayCount = showsMultipleDays ? visibleDayCount : 7;
   // Persists the vertical hour-grid position independently of pane lifecycle.
   // Incoming mobile days and desktop weeks read this while their DOM refs are
@@ -317,6 +318,14 @@ export function DayView({
   const [subHeaderHeights, setSubHeaderHeights] = useState<Record<string, number>>({});
   const reportSubHeaderHeight = useCallback((key: string, height: number) => {
     setSubHeaderHeights((current) => current[key] === height ? current : { ...current, [key]: height });
+  }, []);
+
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 1024px)");
+    const update = () => setShowsFullWeek(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
   }, []);
 
   // ---- Pinch-to-zoom hour height ----
@@ -1101,7 +1110,7 @@ export function DayView({
   const miniStripDate = swipe && swipeCrossedMidpoint ? swipe.neighborDate : selectedDate;
 
   function paneDates(anchorDate: Date): Date[] {
-    const rangeStart = anchorDate;
+    const rangeStart = showsFullWeek ? startOfWeek(anchorDate) : anchorDate;
     return Array.from({ length: visibleDayCount }, (_, index) => addDays(rangeStart, index));
   }
 
@@ -1123,7 +1132,7 @@ export function DayView({
     return dates.map((date, index) => {
       const isSource = !!edit && isSameDay(date, edit.sourceDate);
       const isSelectedPane = isSameDay(date, anchorDate);
-      const isDesktopWeekend = false;
+      const isDesktopWeekend = showsFullWeek && (date.getDay() === 0 || date.getDay() === 6);
       return (
         <div
           key={date.getTime()}
@@ -1194,7 +1203,7 @@ export function DayView({
 
   return (
     <div className={`fixed inset-0 overflow-hidden ${transition ? "pointer-events-none" : ""}`}>
-      {viewMode !== "list" && <div
+      {activeViewMode !== "list" && <div
         ref={swipeContainerRef}
         data-day-swipe
         className="pointer-events-auto absolute inset-0 select-none"
@@ -1283,7 +1292,7 @@ export function DayView({
         </DayScaleContext.Provider>
       </div>}
 
-      {viewMode === "list" && (
+      {activeViewMode === "list" && (
         <CalendarListView
           selectedDate={selectedDate}
           events={events}
@@ -1305,7 +1314,7 @@ export function DayView({
           <div className="hidden px-4 pb-1 pt-1 lg:block">
             <h1 className="text-[34px] font-bold leading-tight">{MONTH_NAMES[selectedDate.getMonth()]}</h1>
           </div>
-          {viewMode !== "list" && <MiniWeekStrip
+          {activeViewMode !== "list" && <MiniWeekStrip
             selectedDate={miniStripDate}
             today={today}
             onSelectDate={navigateTo}
