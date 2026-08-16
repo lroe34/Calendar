@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CalendarEvent, CalendarSource } from "@/lib/types";
 import { dateKey, generateCalendarMonths, MONTH_ABBR } from "@/lib/date-utils";
 import { TopNavBar } from "@/components/shared/TopNavBar";
+import type { MonthEventViewMode } from "@/components/shared/TopNavBar";
 import { TRANSITION_MS, TRANSITION_MS_AFTER_EXIT, TRANSITION_EASE } from "@/lib/transition-constants";
 import { MonthWeekdayHeader } from "./MonthWeekdayHeader";
 import { MonthWeekRow, weekOffTransform, type WeekTransitionPhase } from "./MonthWeekRow";
@@ -68,6 +69,7 @@ export function MonthView({
     ),
   );
   const [visibleSectionIndex, setVisibleSectionIndex] = useState(anchorSectionIndex);
+  const [eventViewMode, setEventViewMode] = useState<MonthEventViewMode>("stacked");
 
   function scrollToSection(index: number, smooth: boolean) {
     const container = scrollRef.current;
@@ -227,6 +229,7 @@ export function MonthView({
                     transitionMode={transition?.mode ?? null}
                     transitionArmed={transition?.armed ?? false}
                     slideDistancePx={transition?.slideDistancePx ?? null}
+                    eventViewMode={eventViewMode}
                   />
                 );
               })}
@@ -244,6 +247,8 @@ export function MonthView({
         <TopNavBar
           backLabel={`${visibleSection.year}`}
           onBack={() => onBack(visibleSection.year, visibleSection.month)}
+          monthEventViewMode={eventViewMode}
+          onMonthEventViewModeChange={setEventViewMode}
         />
       </div>
     </div>

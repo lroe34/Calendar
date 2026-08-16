@@ -87,15 +87,17 @@ export interface DayCellBars {
   overflowCount: number;
 }
 
-const MAX_VISIBLE_BARS = 2;
-
-export function getDayCellBars(slots: MonthEventSlot[], dayIndex: number): DayCellBars {
+export function getDayCellBars(
+  slots: MonthEventSlot[],
+  dayIndex: number,
+  maxVisibleBars = 2,
+): DayCellBars {
   const touching = slots
     .filter((s) => dayIndex >= s.dayStartIndex && dayIndex <= s.dayEndIndex)
     .sort((a, b) => a.slot - b.slot);
 
   return {
-    bars: touching.slice(0, MAX_VISIBLE_BARS),
-    overflowCount: Math.max(0, touching.length - MAX_VISIBLE_BARS),
+    bars: touching.slice(0, maxVisibleBars),
+    overflowCount: Math.max(0, touching.length - maxVisibleBars),
   };
 }

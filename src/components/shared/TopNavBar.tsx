@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { CheckIcon, ChevronLeftIcon, ListViewIcon, PlusIcon, SearchIcon, SingleDayViewIcon, ViewSwitcherIcon } from "./Icons";
 
 export type CalendarViewMode = "single" | "list";
+export type MonthEventViewMode = "stacked" | "compact" | "details";
 
 interface TopNavBarProps {
   backLabel: string;
@@ -13,6 +14,8 @@ interface TopNavBarProps {
   onViewModeChange?: (mode: CalendarViewMode) => void;
   onSearch?: () => void;
   onAdd?: () => void;
+  monthEventViewMode?: MonthEventViewMode;
+  onMonthEventViewModeChange?: (mode: MonthEventViewMode) => void;
 }
 
 const VIEW_OPTIONS = [
@@ -20,7 +23,13 @@ const VIEW_OPTIONS = [
   { mode: "list" as const, label: "List", Icon: ListViewIcon },
 ];
 
-export function TopNavBar({ backLabel, onBack, onViewSwitcher, viewMode, onViewModeChange, onSearch, onAdd }: TopNavBarProps) {
+const MONTH_EVENT_OPTIONS: { mode: MonthEventViewMode; label: string }[] = [
+  { mode: "stacked", label: "Stacked" },
+  { mode: "compact", label: "Compact" },
+  { mode: "details", label: "Details" },
+];
+
+export function TopNavBar({ backLabel, onBack, onViewSwitcher, viewMode, onViewModeChange, onSearch, onAdd, monthEventViewMode, onMonthEventViewModeChange }: TopNavBarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -53,7 +62,7 @@ export function TopNavBar({ backLabel, onBack, onViewSwitcher, viewMode, onViewM
       <div ref={menuRef} className="pointer-events-auto relative flex items-center gap-5 rounded-full bg-black/[.05] px-4 py-2 dark:bg-white/10">
         <button
           onClick={() => {
-            if (onViewModeChange) setMenuOpen((open) => !open);
+            if (onViewModeChange || onMonthEventViewModeChange) setMenuOpen((open) => !open);
             onViewSwitcher?.();
           }}
           aria-label="Switch calendar view"
@@ -75,6 +84,29 @@ export function TopNavBar({ backLabel, onBack, onViewSwitcher, viewMode, onViewM
               >
                 <span className="flex h-6 w-6 items-center justify-center">{viewMode === mode && <CheckIcon className="h-5 w-5" />}</span>
                 <Icon className="h-7 w-7" />
+                <span>{label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {menuOpen && onMonthEventViewModeChange && (
+          <div role="menu" aria-label="Month event layout" className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-56 overflow-hidden rounded-[1.75rem] border border-black/10 bg-white/95 p-2 shadow-2xl backdrop-blur-xl dark:border-white/15 dark:bg-neutral-900/95">
+            {MONTH_EVENT_OPTIONS.map(({ mode, label }) => (
+              <button
+                key={mode}
+                role="menuitemradio"
+                aria-checked={monthEventViewMode === mode}
+                onClick={() => { onMonthEventViewModeChange(mode); setMenuOpen(false); }}
+                className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-[18px] active:bg-black/[.06] dark:active:bg-white/10"
+              >
+                <span className="flex h-6 w-6 items-center justify-center">{monthEventViewMode === mode && <CheckIcon className="h-5 w-5" />}</span>
+                <span className="flex h-7 w-7 flex-col justify-center gap-[3px] overflow-hidden rounded-md">
+                  {mode === "compact" ? (
+                    <span className="flex h-1.5 overflow-hidden rounded-full"><i className="flex-1 bg-blue-400" /><i className="flex-1 bg-green-300" /><i className="flex-1 bg-purple-300" /></span>
+                  ) : [0, 1, ...(mode === "details" ? [2] : [])].map((line) => (
+                    <i key={line} className={`${mode === "details" ? "h-1.5 rounded-sm bg-blue-200" : "h-1 rounded-full bg-blue-400"}`} />
+                  ))}
+                </span>
                 <span>{label}</span>
               </button>
             ))}

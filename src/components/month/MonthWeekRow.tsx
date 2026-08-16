@@ -46,6 +46,7 @@ interface MonthWeekRowProps {
   transitionArmed?: boolean;
   /** Vertical travel of the flying day-numbers; "before" rows slide by this same distance instead of the full viewport. */
   slideDistancePx?: number | null;
+  eventViewMode: "stacked" | "compact" | "details";
 }
 
 export function MonthWeekRow({
@@ -59,13 +60,15 @@ export function MonthWeekRow({
   transitionMode = null,
   transitionArmed = false,
   slideDistancePx = null,
+  eventViewMode,
 }: MonthWeekRowProps) {
   const weekDays = days.map((d) => d.date);
   const slots = computeWeekSlots(weekDays, events);
 
   // Blank (adjacent-month) cells never show bars here — that date's events
   // render in its own month's section instead.
-  const perDay = weekDays.map((_, i) => (days[i].blank ? { bars: [], overflowCount: 0 } : getDayCellBars(slots, i)));
+  const maxVisibleBars = eventViewMode === "compact" ? Number.POSITIVE_INFINITY : eventViewMode === "details" ? 3 : 2;
+  const perDay = weekDays.map((_, i) => (days[i].blank ? { bars: [], overflowCount: 0 } : getDayCellBars(slots, i, maxVisibleBars)));
 
   const renderedPerDay: { bars: RenderedBar[]; overflowCount: number }[] = perDay.map(
     (cell, i) => ({
@@ -73,11 +76,15 @@ export function MonthWeekRow({
       bars: cell.bars.map((slot, rank) => {
         const calendar = calendarsById.get(slot.event.calendarId);
         const color = calendar ? CALENDAR_COLORS[calendar.color].accent : "#999";
+        const tint = calendar ? CALENDAR_COLORS[calendar.color].tint : "#e9e9eb";
+        const textColor = calendar ? CALENDAR_COLORS[calendar.color].text : "#55555a";
         const prevBarAtRank = i > 0 ? perDay[i - 1].bars[rank] : undefined;
         const nextBarAtRank = i < 6 ? perDay[i + 1].bars[rank] : undefined;
         return {
           event: slot.event,
           color,
+          tint,
+          textColor,
           continuesFromPrev: prevBarAtRank?.event.id === slot.event.id,
           continuesToNext: nextBarAtRank?.event.id === slot.event.id,
         };
@@ -180,6 +187,7 @@ export function MonthWeekRow({
           overflowCount={renderedPerDay[i].overflowCount}
           onSelect={onSelectDate}
           numberHidden={transitionPhase === "selected"}
+          eventViewMode={eventViewMode}
         />
       ))}
     </div>
