@@ -3,19 +3,29 @@ import type { CalendarColorName } from "./types";
 interface ColorTokens {
   /** Solid accent used for month-view bars and the day-view left accent strip */
   accent: string;
-  /** Pale tint used for day-view block fill */
+  /** Translucent accent used for event fills so the surface follows the theme */
   tint: string;
-  /** Text color for content drawn on top of the tint fill */
+  /** Accent color for content drawn on top of the translucent fill */
   text: string;
 }
 
+function calendarColor(accent: string): ColorTokens {
+  return {
+    accent,
+    tint: hexToRgba(accent, 0.18),
+    text: accent,
+  };
+}
+
 export const CALENDAR_COLORS: Record<CalendarColorName, ColorTokens> = {
-  green: { accent: "#63b76c", tint: "#e3f2e2", text: "#2f5e34" },
-  blue: { accent: "#4f9bf0", tint: "#dcebfc", text: "#1f5590" },
-  gray: { accent: "#9a9a9e", tint: "#e9e9eb", text: "#55555a" },
-  tan: { accent: "#c9a877", tint: "#f2e9d8", text: "#7a5f34" },
-  purple: { accent: "#a68ee0", tint: "#ece5f9", text: "#5c4693" },
-  slate: { accent: "#5b6b8c", tint: "#e2e6ee", text: "#333f57" },
+  // Apple's light-appearance system colors. The translucent fill derived
+  // above lets the same accents sit naturally on both light and dark surfaces.
+  green: calendarColor("#34C759"),
+  blue: calendarColor("#007AFF"),
+  gray: calendarColor("#8E8E93"),
+  tan: calendarColor("#A2845E"), // systemBrown
+  purple: calendarColor("#AF52DE"),
+  slate: calendarColor("#5856D6"), // systemIndigo
 };
 
 /** `#rrggbb` (or `#rgb`) plus an 0-1 alpha, as an `rgba(...)` string. */

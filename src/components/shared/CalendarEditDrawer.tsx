@@ -18,9 +18,9 @@ const COLOR_NAMES: Record<CalendarColorName, string> = {
   green: "Green",
   blue: "Blue",
   gray: "Gray",
-  tan: "Tan",
+  tan: "Brown",
   purple: "Purple",
-  slate: "Slate",
+  slate: "Indigo",
 };
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {

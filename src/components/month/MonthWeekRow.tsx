@@ -75,9 +75,10 @@ export function MonthWeekRow({
       overflowCount: cell.overflowCount,
       bars: cell.bars.map((slot, rank) => {
         const calendar = calendarsById.get(slot.event.calendarId);
-        const color = calendar ? CALENDAR_COLORS[calendar.color].accent : "#999";
-        const tint = calendar ? CALENDAR_COLORS[calendar.color].tint : "#e9e9eb";
-        const textColor = calendar ? CALENDAR_COLORS[calendar.color].text : "#55555a";
+        const colorTokens = calendar ? CALENDAR_COLORS[calendar.color] : CALENDAR_COLORS.gray;
+        const color = colorTokens.accent;
+        const tint = colorTokens.tint;
+        const textColor = colorTokens.text;
         const prevBarAtRank = i > 0 ? perDay[i - 1].bars[rank] : undefined;
         const nextBarAtRank = i < 6 ? perDay[i + 1].bars[rank] : undefined;
         return {
