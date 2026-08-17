@@ -1136,12 +1136,19 @@ export function DayView({
       const isSource = !!edit && isSameDay(date, edit.sourceDate);
       const isSelectedPane = isSameDay(date, anchorDate);
       const isDesktopWeekend = showsFullWeek && (date.getDay() === 0 || date.getDay() === 6);
+      const weekendShadeIsOff =
+        isDesktopWeekend && transition?.mode === "exit" && transition.armed;
       return (
         <div
           key={date.getTime()}
           className={`relative min-w-0 border-r border-black/[.06] last:border-r-0 dark:border-white/[.08] ${
-            isDesktopWeekend ? "bg-black/[.025] dark:bg-white/[.055]" : ""
+            isDesktopWeekend && !weekendShadeIsOff ? "bg-black/[.025] dark:bg-white/[.055]" : "bg-transparent"
           }`}
+          style={
+            isDesktopWeekend && transition?.mode === "exit"
+              ? { transition: `background-color ${TRANSITION_MS}ms ${TRANSITION_EASE}` }
+              : undefined
+          }
         >
           <DayContentPane
             date={date}
